@@ -1,28 +1,25 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose from 'mongoose';
 
-// Interface for TypeScript type-checking
-export interface ICase extends Document {
-  clientName: string;
-  caseTitle: string;
-  court: string;
-  date: string;
-  status: string;
-}
-
-// Mongoose schema
-const caseSchema: Schema = new Schema(
-  {
-    clientName: { type: String, required: true },
-    caseTitle: { type: String, required: true },
-    court: { type: String, required: true },
-    date: { type: String, required: true },
-    status: { type: String, required: true },
+const caseSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  caseNumber: { type: String, required: true, unique: true },
+  client: {
+    name: { type: String, required: true },
+    phone: { type: String },
+    email: { type: String },
   },
-  {
-    timestamps: true // adds createdAt and updatedAt
-  }
-);
+  court: { type: String },
+  fee: {
+    total: { type: Number, default: 0 },
+    paid: { type: Number, default: 0 },
+    pending: { type: Number, default: 0 },
+    status: { type: String, enum: ['Completed', 'Partial', 'Pending'], default: 'Pending' },
+  },
+  status: { type: String, enum: ['In Progress', 'Pending', 'Closed'], default: 'Pending' },
+  nextHearing: { type: String },
+  createdAt: { type: Date, default: Date.now },
+  documents: [{ type: String }], // Array of file paths
+  notes: { type: String }, // Maps to "Proceeding" in frontend
+});
 
-// Export the model
-const Case = mongoose.model<ICase>('Case', caseSchema);
-export default Case;
+export default mongoose.model('Case', caseSchema);

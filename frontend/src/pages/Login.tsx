@@ -10,7 +10,9 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Scale, Eye, EyeOff, Mail, Lock } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
+import { toast } from "sonner";
 
 export const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -18,18 +20,52 @@ export const Login = () => {
     email: "",
     password: "",
   });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Login attempt:", formData);
-    // TODO: Implement login functionality
-  };
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({
       ...prev,
       [e.target.name]: e.target.value,
     }));
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await axios.post(
+        "http://localhost:5000/lawyers/login",
+        {
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
+        },
+        { timeout: 10000 }
+      );
+
+      const { token, user } = response.data;
+
+      if (!token || !user) {
+        throw new Error("Invalid response from server");
+      }
+
+      localStorage.setItem("authToken", token);
+      toast.success("Login successful! Welcome back.");
+      navigate("/dashboard");
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.status === 401
+          ? "Invalid email or password. Please try again."
+          : err.response?.data?.error || err.message || "Failed to sign in. Please try again.";
+      setError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -100,6 +136,8 @@ export const Login = () => {
                 </div>
               </div>
 
+              {error && <p className="text-xs text-destructive">{error}</p>}
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <input
@@ -111,13 +149,13 @@ export const Login = () => {
                     Remember me
                   </Label>
                 </div>
-                <Link to="#" className="text-sm text-primary hover:underline">
+                <Link to="/forgot-password" className="text-sm text-primary hover:underline">
                   Forgot password?
                 </Link>
               </div>
 
-              <Button type="submit" className="w-full">
-                Sign In
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Signing In..." : "Sign In"}
               </Button>
             </form>
 

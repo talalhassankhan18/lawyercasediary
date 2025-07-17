@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
 import { 
   FolderOpen, 
   Calendar, 
@@ -19,8 +19,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Toggle } from '@/components/ui/toggle';
+} from '../components/ui/table';
+import { Toggle } from '../components/ui/toggle';
 
 export const Dashboard = () => {
   const [recentCasesView, setRecentCasesView] = useState<'cards' | 'table'>('cards');

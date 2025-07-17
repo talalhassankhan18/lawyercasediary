@@ -3,12 +3,12 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Calendar, 
-  DollarSign, 
+import {
+  Plus,
+  Search,
+  Filter,
+  Calendar,
+  DollarSign,
   FileText,
   Phone,
   Mail,
@@ -17,11 +17,12 @@ import {
   Grid3X3,
   List,
   Upload,
-  Paperclip
+  Paperclip,
 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -45,8 +46,15 @@ import {
 } from '../components/ui/table';
 import { Toggle } from '../components/ui/toggle';
 import axios from 'axios';
-import { Case } from '../../../types/case'; // Adjust path if types/ is elsewhere
+import { Case } from '../../../types/case';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+
+// Updated API_URL definition for Vite
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+// Debug log to verify environment variable
+console.log('VITE_API_URL:', API_URL);
 
 export const CaseManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,67 +62,118 @@ export const CaseManagement = () => {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [cases, setCases] = useState<Case[]>([]);
   const [isAddCaseOpen, setIsAddCaseOpen] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [caseToEdit, setCaseToEdit] = useState<Case | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lawyerId, setLawyerId] = useState<string | undefined>(undefined);
+  const navigate = useNavigate();
+
+  const fetchLawyerData = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+      const res = await axios.get(`${API_URL}/lawyers/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setLawyerId(res.data.user.id);
+    } catch (err: any) {
+      console.error('Error fetching lawyer data:', err.response?.data || err.message);
+      if (err.response?.status === 401) {
+        toast.error('Session expired. Please sign in again.');
+        localStorage.removeItem('authToken');
+        navigate('/login');
+      } else if (err.response?.status === 404) {
+        toast.error('User not found. Please contact support.');
+      } else {
+        toast.error(err.response?.data?.error || 'Failed to fetch lawyer data');
+      }
+    }
+  };
 
   const fetchCases = async () => {
+    if (!lawyerId) return;
     setLoading(true);
     try {
-      const res = await axios.get('http://localhost:5000/api/cases');
-      setCases(res.data);
-    } catch (err) {
-      toast.error('Error fetching cases');
-      console.error('Error fetching cases:', err);
+      const token = localStorage.getItem('authToken');
+      const res = await axios.get(`${API_URL}/api/cases`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setCases(Array.isArray(res.data) ? res.data : []);
+      console.log('Fetched cases:', res.data); // Debug log
+    } catch (err: any) {
+      console.error('Error fetching cases:', err.response?.data || err.message);
+      let errorMsg = 'Error fetching cases';
+      if (err.response?.status === 401) {
+        errorMsg = 'Session expired. Please sign in again.';
+        localStorage.removeItem('authToken');
+        navigate('/login');
+      } else {
+        errorMsg = err.response?.data?.error || 'Failed to fetch cases';
+      }
+      toast.error(errorMsg);
+      setCases([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCases();
+    fetchLawyerData();
   }, []);
 
-  const filteredCases = cases.filter(case_ => {
-    const matchesSearch = case_.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         case_.client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         case_.caseNumber.toLowerCase().includes(searchTerm.toLowerCase());
+  useEffect(() => {
+    if (lawyerId) {
+      fetchCases();
+    }
+  }, [lawyerId]);
+
+  const filteredCases = cases.filter((case_) => {
+    const matchesSearch =
+      case_.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      case_.client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      case_.caseNumber.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = selectedStatus === 'all' || case_.status.toLowerCase() === selectedStatus;
     return matchesSearch && matchesStatus;
   });
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'In Progress': return 'bg-green-100 text-green-800';
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Closed': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-blue-100 text-blue-800';
+      case 'In Progress':
+        return 'bg-green-100 text-green-800';
+      case 'Pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Closed':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-blue-100 text-blue-800';
     }
   };
 
   const getFeeStatusColor = (status: string) => {
     switch (status) {
-      case 'Completed': return 'bg-green-100 text-green-800';
-      case 'Partial': return 'bg-yellow-100 text-yellow-800';
-      case 'Pending': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'Completed':
+        return 'bg-green-100 text-green-800';
+      case 'Partial':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Pending':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    console.log('Selected files:', files); // Debug log
-    setSelectedFiles(files);
   };
 
   const handleDelete = async (id: string) => {
     try {
-      await axios.delete(`http://localhost:5000/api/cases/${id}`);
-      setCases(cases.filter(case_ => case_._id !== id));
+      const token = localStorage.getItem('authToken');
+      await axios.delete(`${API_URL}/api/cases/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setCases(cases.filter((case_) => case_._id !== id));
       toast.success('Case deleted');
-    } catch (err) {
-      toast.error('Error deleting case');
-      console.error('Error deleting case:', err);
+    } catch (err: any) {
+      console.error('Error deleting case:', err.response?.data || err.message);
+      toast.error(err.response?.data?.error || 'Error deleting case');
     }
   };
 
@@ -126,8 +185,7 @@ export const CaseManagement = () => {
   const handleSave = () => {
     setIsAddCaseOpen(false);
     setCaseToEdit(null);
-    setSelectedFiles(null);
-    fetchCases();
+    fetchCases(); // Refetch cases after saving
   };
 
   const renderCards = () => (
@@ -154,7 +212,9 @@ export const CaseManagement = () => {
             </div>
             <div className="flex items-center gap-2 text-xs md:text-sm text-gray-600">
               <DollarSign className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
-              <span>Total: ${case_.fee.total} | Paid: ${case_.fee.paid} | Pending: ${case_.fee.pending}</span>
+              <span>
+                Total: ${case_.fee.total} | Paid: ${case_.fee.paid} | Pending: ${case_.fee.pending}
+              </span>
               <Badge className={`${getFeeStatusColor(case_.fee.status)} text-xs ml-2`}>
                 {case_.fee.status}
               </Badge>
@@ -177,17 +237,27 @@ export const CaseManagement = () => {
                 <span>{case_.documents?.length || 0} documents</span>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="text-xs" onClick={() => {
-                  setCaseToEdit(case_);
-                  setIsAddCaseOpen(true);
-                }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => {
+                    setCaseToEdit(case_);
+                    setIsAddCaseOpen(true);
+                  }}
+                >
                   <Upload className="w-3 h-3 mr-1" />
                   Upload
                 </Button>
                 <Button size="sm" className="text-xs" onClick={() => handleEdit(case_)}>
                   Edit
                 </Button>
-                <Button variant="destructive" size="sm" className="text-xs" onClick={() => handleDelete(case_._id!)}>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => handleDelete(case_._id!)}
+                >
                   Delete
                 </Button>
               </div>
@@ -239,17 +309,27 @@ export const CaseManagement = () => {
               </TableCell>
               <TableCell>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => {
-                    setCaseToEdit(case_);
-                    setIsAddCaseOpen(true);
-                  }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      setCaseToEdit(case_);
+                      setIsAddCaseOpen(true);
+                    }}
+                  >
                     <Upload className="w-3 h-3 mr-1" />
                     Upload
                   </Button>
                   <Button size="sm" className="text-xs" onClick={() => handleEdit(case_)}>
                     Edit
                   </Button>
-                  <Button variant="destructive" size="sm" className="text-xs" onClick={() => handleDelete(case_._id!)}>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => handleDelete(case_._id!)}
+                  >
                     Delete
                   </Button>
                 </div>
@@ -268,11 +348,13 @@ export const CaseManagement = () => {
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Case Management</h1>
           <p className="text-gray-600 text-sm md:text-base">Manage your legal cases and client information</p>
         </div>
-        <Dialog open={isAddCaseOpen} onOpenChange={(open) => {
-          setIsAddCaseOpen(open);
-          if (!open) setCaseToEdit(null);
-          console.log('Dialog open state:', open); // Debug log
-        }}>
+        <Dialog
+          open={isAddCaseOpen}
+          onOpenChange={(open) => {
+            setIsAddCaseOpen(open);
+            if (!open) setCaseToEdit(null);
+          }}
+        >
           <DialogTrigger asChild>
             <Button className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
@@ -282,8 +364,11 @@ export const CaseManagement = () => {
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{caseToEdit ? 'Edit Case' : 'Add New Case'}</DialogTitle>
+              <DialogDescription>
+                {caseToEdit ? 'Update the details of an existing case.' : 'Enter the details for a new case.'}
+              </DialogDescription>
             </DialogHeader>
-            <CaseForm caseToEdit={caseToEdit} onSave={handleSave} onCancel={() => setIsAddCaseOpen(false)} />
+            <CaseForm caseToEdit={caseToEdit} onSave={handleSave} onCancel={() => setIsAddCaseOpen(false)} lawyerId={lawyerId} />
           </DialogContent>
         </Dialog>
       </div>
@@ -334,7 +419,11 @@ export const CaseManagement = () => {
         <div className="text-center py-12">
           <p className="text-gray-600">Loading cases...</p>
         </div>
-      ) : viewMode === 'cards' ? renderCards() : renderTable()}
+      ) : viewMode === 'cards' ? (
+        renderCards()
+      ) : (
+        renderTable()
+      )}
 
       {filteredCases.length === 0 && !loading && (
         <div className="text-center py-12">
@@ -349,10 +438,11 @@ export const CaseManagement = () => {
 interface CaseFormProps {
   caseToEdit?: Case | null;
   onSave: () => void;
-  onCancel: () => void; // Added to close the dialog
+  onCancel: () => void;
+  lawyerId: string | undefined;
 }
 
-const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel }) => {
+const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel, lawyerId }) => {
   const [formData, setFormData] = useState<Case>({
     title: '',
     caseNumber: '',
@@ -363,14 +453,17 @@ const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel }) => 
     nextHearing: '',
     documents: [],
     notes: '',
+    lawyerId: lawyerId || '',
   });
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
 
   useEffect(() => {
     if (caseToEdit) {
-      setFormData(caseToEdit);
+      setFormData({ ...caseToEdit, lawyerId });
+    } else if (lawyerId) {
+      setFormData((prev) => ({ ...prev, lawyerId }));
     }
-  }, [caseToEdit]);
+  }, [caseToEdit, lawyerId]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -393,36 +486,44 @@ const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel }) => 
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    console.log('Selected files:', files); // Debug log
     setSelectedFiles(files);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Submitting form data:', formData); // Debug log
     try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
       const data = { ...formData };
       let caseId: string;
       if (caseToEdit?._id) {
-        await axios.put(`http://localhost:5000/api/cases/${caseToEdit._id}`, data);
+        await axios.put(`${API_URL}/api/cases/${caseToEdit._id}`, data, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         caseId = caseToEdit._id;
       } else {
-        const response = await axios.post('http://localhost:5000/api/cases', data);
+        const response = await axios.post(`${API_URL}/api/cases`, data, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         caseId = response.data._id;
       }
       if (selectedFiles && selectedFiles.length > 0) {
         const formDataToSend = new FormData();
-        Array.from(selectedFiles).forEach(file => formDataToSend.append('documents', file));
-        console.log('Uploading files:', Array.from(selectedFiles).map(f => f.name)); // Debug log
-        await axios.post(`http://localhost:5000/api/cases/${caseId}/documents`, formDataToSend, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+        Array.from(selectedFiles).forEach((file) => formDataToSend.append('documents', file));
+        await axios.post(`${API_URL}/api/cases/${caseId}/documents`, formDataToSend, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: `Bearer ${token}`,
+          },
         });
       }
       onSave();
       toast.success(caseToEdit ? 'Case updated' : 'Case added');
-    } catch (error) {
-      console.error('Error saving case:', error.response?.data || error.message); // Detailed error log
-      toast.error('Error saving case: ' + (error.response?.data?.error || error.message));
+    } catch (error: any) {
+      console.error('Error saving case:', error.response?.data || error.message);
+      toast.error(error.response?.data?.error || 'Error saving case');
     }
   };
 
@@ -430,14 +531,7 @@ const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel }) => 
     <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
       <div>
         <Label htmlFor="title">Title</Label>
-        <Input
-          id="title"
-          name="title"
-          value={formData.title}
-          onChange={handleChange}
-          required
-          className="mt-1"
-        />
+        <Input id="title" name="title" value={formData.title} onChange={handleChange} required className="mt-1" />
       </div>
       <div>
         <Label htmlFor="caseNumber">Case Number</Label>
@@ -476,20 +570,15 @@ const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel }) => 
         <Input
           id="client.email"
           name="client.email"
-          value={formData.client.email || ''}
+          value={formData.client.email || ''
+          }
           onChange={handleChange}
           className="mt-1"
         />
       </div>
       <div>
         <Label htmlFor="court">Court</Label>
-        <Input
-          id="court"
-          name="court"
-          value={formData.court || ''}
-          onChange={handleChange}
-          className="mt-1"
-        />
+        <Input id="court" name="court" value={formData.court || ''} onChange={handleChange} className="mt-1" />
       </div>
       <div>
         <Label htmlFor="fee.total">Fee Total</Label>
@@ -515,7 +604,11 @@ const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel }) => 
       </div>
       <div>
         <Label htmlFor="fee.status">Fee Status</Label>
-        <Select name="fee.status" value={formData.fee.status} onValueChange={(value) => handleChange({ target: { name: 'fee.status', value } } as any)}>
+        <Select
+          name="fee.status"
+          value={formData.fee.status}
+          onValueChange={(value) => handleChange({ target: { name: 'fee.status', value } } as any)}
+        >
           <SelectTrigger className="mt-1">
             <SelectValue />
           </SelectTrigger>
@@ -528,7 +621,11 @@ const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel }) => 
       </div>
       <div>
         <Label htmlFor="status">Case Status</Label>
-        <Select name="status" value={formData.status} onValueChange={(value) => handleChange({ target: { name: 'status', value } } as any)}>
+        <Select
+          name="status"
+          value={formData.status}
+          onValueChange={(value) => handleChange({ target: { name: 'status', value } } as any)}
+        >
           <SelectTrigger className="mt-1">
             <SelectValue />
           </SelectTrigger>
@@ -545,38 +642,25 @@ const CaseForm: React.FC<CaseFormProps> = ({ caseToEdit, onSave, onCancel }) => 
           id="nextHearing"
           name="nextHearing"
           type="date"
-          value={formData.nextHearing || ''}
+          value={formData.nextHearing || ''
+          }
           onChange={handleChange}
           className="mt-1"
         />
       </div>
       <div className="md:col-span-2">
         <Label htmlFor="notes">Notes</Label>
-        <Textarea
-          id="notes"
-          name="notes"
-          value={formData.notes || ''}
-          onChange={handleChange}
-          className="mt-1"
-        />
+        <Textarea id="notes" name="notes" value={formData.notes || ''} onChange={handleChange} className="mt-1" />
       </div>
       <div className="md:col-span-2">
         <Label htmlFor="documents">Upload Documents</Label>
-        <Input
-          id="documents"
-          type="file"
-          multiple
-          onChange={handleFileUpload}
-          className="mt-1"
-        />
+        <Input id="documents" type="file" multiple onChange={handleFileUpload} className="mt-1" />
       </div>
       <div className="flex justify-end gap-2 md:col-span-2">
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">
-          {caseToEdit ? 'Update Case' : 'Add Case'}
-        </Button>
+        <Button type="submit">{caseToEdit ? 'Update Case' : 'Add Case'}</Button>
       </div>
     </form>
   );

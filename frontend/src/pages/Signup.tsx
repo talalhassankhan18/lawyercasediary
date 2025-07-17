@@ -31,6 +31,7 @@ export const Signup = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
+  const [showFeeSecurityKey, setShowFeeSecurityKey] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [formData, setFormData] = useState({
@@ -44,11 +45,10 @@ export const Signup = () => {
     phoneNumber: "",
   });
   const [loading, setLoading] = useState(false);
-  const [timeZoneOffset, setTimeZoneOffset] = useState(0); // To adjust for client time zone
+  const [timeZoneOffset, setTimeZoneOffset] = useState(0);
 
   useEffect(() => {
-    // Set time zone offset based on client's local time (e.g., PKT is UTC+5)
-    const offset = new Date().getTimezoneOffset() / -60; // Convert to hours
+    const offset = new Date().getTimezoneOffset() / -60;
     setTimeZoneOffset(offset);
   }, []);
 
@@ -75,9 +75,9 @@ export const Signup = () => {
         newErrors.firmName = "Firm name too long";
       if (!formData.phoneNumber.trim())
         newErrors.phoneNumber = "Phone number is required";
-      else if (!/^\+?[1-9]\d{6,14}$/.test(formData.phoneNumber)) {
+      else if (!/^\+?92[0-9]{10}$|^0[3][0-9]{9}$/.test(formData.phoneNumber)) {
         newErrors.phoneNumber =
-          "Invalid phone number format (e.g., +925551234567)";
+          "Invalid phone number. Use format like 03335759985 or +923335759985";
       }
     } else if (step === 2) {
       if (!formData.password) newErrors.password = "Password is required";
@@ -162,10 +162,32 @@ export const Signup = () => {
         error.message ||
         "An unexpected error occurred";
       if (error.response?.status === 400) {
-        // Map backend validation errors to form fields if possible
-        setErrors({ verificationCode: errorMsg }); // Example mapping for step 3
+        setErrors({ verificationCode: errorMsg });
       }
       toast.error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    try {
+      setLoading(true);
+      console.log("Attempting to resend code for email:", formData.email); // Debug log
+      const response = await axios.post(
+        "http://localhost:5000/lawyers/resend-verification",
+        {
+          email: formData.email,
+        },
+        { timeout: 20000 } // Increased to 20 seconds
+      );
+      toast.success(response.data.message);
+      console.log("Resend successful:", response.data.message); // Debug log
+    } catch (error) {
+      console.error("Resend error:", error); // Debug log
+      toast.error(
+        error.response?.data?.error || "Failed to resend verification code"
+      );
     } finally {
       setLoading(false);
     }
@@ -175,35 +197,15 @@ export const Signup = () => {
     const { name, value } = e.target;
     let sanitizedValue = value.trim();
     if (name === "feeSecurityKey") {
-      sanitizedValue = value.replace(/[^0-9]/g, "").slice(0, 4); // Restrict to 4 digits
+      sanitizedValue = value.replace(/[^0-9]/g, "").slice(0, 4);
     } else if (name === "phoneNumber") {
-      sanitizedValue = value.replace(/[^0-9+]/g, "").slice(0, 15); // Restrict to valid phone length
+      sanitizedValue = value.replace(/[^0-9+]/g, "").slice(0, 15);
     }
     setFormData((prev) => ({
       ...prev,
       [name]: sanitizedValue,
     }));
     setErrors((prev) => ({ ...prev, [name]: "" }));
-  };
-
-  const handleResendCode = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.post(
-        "http://localhost:5000/lawyers/resend-verification",
-        {
-          email: formData.email,
-        },
-        { timeout: 10000 }
-      );
-      toast.success(response.data.message);
-    } catch (error) {
-      toast.error(
-        error.response?.data?.error || "Failed to resend verification code"
-      );
-    } finally {
-      setLoading(false);
-    }
   };
 
   const renderStep = () => {
@@ -287,7 +289,7 @@ export const Signup = () => {
                 id="phoneNumber"
                 name="phoneNumber"
                 type="tel"
-                placeholder="+925551234567"
+                placeholder="e.g., 03335759985 or +923335759985"
                 value={formData.phoneNumber}
                 onChange={handleChange}
                 required
@@ -364,7 +366,7 @@ export const Signup = () => {
                 <Input
                   id="feeSecurityKey"
                   name="feeSecurityKey"
-                  type="text"
+                  type={showFeeSecurityKey ? "text" : "password"}
                   inputMode="numeric"
                   pattern="[0-9]*"
                   placeholder="Enter 4-digit security key"
@@ -376,6 +378,19 @@ export const Signup = () => {
                   }`}
                   required
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowFeeSecurityKey(!showFeeSecurityKey)}
+                >
+                  {showFeeSecurityKey ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
               </div>
               {errors.feeSecurityKey && (
                 <p className="text-xs text-destructive">
@@ -411,7 +426,7 @@ export const Signup = () => {
                 <strong>{formData.email}</strong>. It expires at{" "}
                 {new Date(
                   Date.now() +
-                    24 * 60 * 60 * 1000 +
+                    48 * 60 * 60 * 1000 +
                     timeZoneOffset * 60 * 60 * 1000
                 ).toLocaleString()}
               </p>

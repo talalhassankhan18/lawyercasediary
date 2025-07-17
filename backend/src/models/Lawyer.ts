@@ -1,33 +1,42 @@
-import mongoose, { CallbackError } from "mongoose";
-import bcrypt from "bcrypt";
+import mongoose, { Schema, Document } from "mongoose";
+import bcrypt from "bcryptjs";
 
-const lawyerSchema = new mongoose.Schema({
-  firstName: { type: String, required: true, trim: true },
-  lastName: { type: String, required: true, trim: true },
+export interface ILawyer extends Document {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  firmName: string;
+  phoneNumber: string;
+  feeSecurityKey: string;
+  verificationCode?: string;
+  verificationCodeExpires?: Date;
+  isVerified: boolean;
+  subscription: {
+    plan: string;
+    status: "Active" | "Pending" | "Cancelled";
+    trialEnd?: Date;
+  };
+  createdAt: Date;
+  comparePassword(password: string): Promise<boolean>;
+  compareFeeSecurityKey(key: string): Promise<boolean>;
+}
+
+const lawyerSchema = new Schema<ILawyer>({
+  firstName: { type: String, required: true, trim: true, maxlength: 50 },
+  lastName: { type: String, required: true, trim: true, maxlength: 50 },
   email: {
     type: String,
     required: true,
     unique: true,
     trim: true,
     lowercase: true,
-    match: [
-      /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/,
-      "Please enter a valid email address",
-    ],
+    maxlength: 100,
   },
-  password: { type: String, required: true, minlength: 8 },
-  feeSecurityKey: {
-    type: String,
-    required: true,
-    minlength: 4,
-    maxlength: 4,
-  },
-  firmName: { type: String, required: true, trim: true },
-  phoneNumber: {
-    type: String,
-    required: true,
-    match: [/^\+?[1-9]\d{1,14}$/, "Please enter a valid phone number"],
-  },
+  password: { type: String, required: true },
+  firmName: { type: String, required: true, trim: true, maxlength: 100 },
+  phoneNumber: { type: String, required: true, trim: true, maxlength: 15 },
+  feeSecurityKey: { type: String, required: true },
   verificationCode: { type: String },
   verificationCodeExpires: { type: Date },
   isVerified: { type: Boolean, default: false },
@@ -43,11 +52,8 @@ const lawyerSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// Create indexes for better query performance
-lawyerSchema.index({ email: 1 });
-
 // Hash password and feeSecurityKey before saving
-lawyerSchema.pre("save", async function (next: (err?: CallbackError) => void) {
+lawyerSchema.pre("save", async function (next) {
   try {
     if (this.isModified("password")) {
       this.password = await bcrypt.hash(this.password, 10);
@@ -56,31 +62,24 @@ lawyerSchema.pre("save", async function (next: (err?: CallbackError) => void) {
       this.feeSecurityKey = await bcrypt.hash(this.feeSecurityKey, 10);
     }
     next();
-  } catch (error) {
-    next(error as CallbackError);
+  } catch (error: any) {
+    console.error("❌ Error in Lawyer schema pre-save hook:", error.message);
+    next(error);
   }
 });
 
-// Method to compare passwords
-lawyerSchema.methods.comparePassword = async function (
-  candidatePassword: string
-): Promise<boolean> {
-  try {
-    return await bcrypt.compare(candidatePassword, this.password);
-  } catch (error) {
-    throw new Error("Error comparing password");
-  }
+// Method to compare password
+lawyerSchema.methods.comparePassword = async function (password: string) {
+  return await bcrypt.compare(password, this.password);
 };
 
-// Method to compare fee security key
-lawyerSchema.methods.compareFeeSecurityKey = async function (
-  candidateKey: string
-): Promise<boolean> {
-  try {
-    return await bcrypt.compare(candidateKey, this.feeSecurityKey);
-  } catch (error) {
-    throw new Error("Error comparing fee security key");
-  }
+// Method to compare feeSecurityKey
+lawyerSchema.methods.compareFeeSecurityKey = async function (key: string) {
+  return await bcrypt.compare(key, this.feeSecurityKey);
 };
 
-export default mongoose.model("Lawyer", lawyerSchema);
+const Lawyer = mongoose.model<ILawyer>("Lawyer", lawyerSchema);
+
+console.log("✅ Lawyer model initialized");
+
+export default Lawyer;

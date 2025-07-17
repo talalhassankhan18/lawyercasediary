@@ -1,6 +1,4 @@
-
 import { Toaster } from "./components/ui/toaster";
-import { Toaster as Sonner } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -23,72 +21,92 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          
+
           {/* Protected Dashboard Routes */}
-          <Route path="/dashboard" element={
-            <div className="flex min-h-screen bg-gray-50">
-              <Sidebar />
-              <div className="flex-1 overflow-auto ml-12 md:ml-0">
-                <Dashboard />
+          <Route
+            path="/dashboard"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <Dashboard />
+                </div>
               </div>
-            </div>
-          } />
-          <Route path="/cases" element={
-            <div className="flex min-h-screen bg-gray-50">
-              <Sidebar />
-              <div className="flex-1 overflow-auto ml-12 md:ml-0">
-                <CaseManagement />
+            }
+          />
+          <Route
+            path="/cases"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <CaseManagement />
+                </div>
               </div>
-            </div>
-          } />
-          <Route path="/fees" element={
-            <div className="flex min-h-screen bg-gray-50">
-              <Sidebar />
-              <div className="flex-1 overflow-auto ml-12 md:ml-0">
-                <FeeManagement />
+            }
+          />
+          <Route
+            path="/fees"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <FeeManagement />
+                </div>
               </div>
-            </div>
-          } />
-          <Route path="/calendar" element={
-            <div className="flex min-h-screen bg-gray-50">
-              <Sidebar />
-              <div className="flex-1 overflow-auto ml-12 md:ml-0">
-                <LawyerCalendar />
+            }
+          />
+          <Route
+            path="/calendar"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <LawyerCalendar />
+                </div>
               </div>
-            </div>
-          } />
-          <Route path="/clients" element={
-            <div className="flex min-h-screen bg-gray-50">
-              <Sidebar />
-              <div className="flex-1 overflow-auto ml-12 md:ml-0">
-                <LawyerClients />
+            }
+          />
+          <Route
+            path="/clients"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <LawyerClients />
+                </div>
               </div>
-            </div>
-          } />
-          <Route path="/notifications" element={
-            <div className="flex min-h-screen bg-gray-50">
-              <Sidebar />
-              <div className="flex-1 overflow-auto ml-12 md:ml-0">
-                <LawyerNotifications />
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <LawyerNotifications />
+                </div>
               </div>
-            </div>
-          } />
-          <Route path="/settings" element={
-            <div className="flex min-h-screen bg-gray-50">
-              <Sidebar />
-              <div className="flex-1 overflow-auto ml-12 md:ml-0">
-                <LawyerSettings />
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <LawyerSettings />
+                </div>
               </div>
-            </div>
-          } />
-          
+            }
+          />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

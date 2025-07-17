@@ -1,5 +1,6 @@
 export interface Case {
   _id?: string;
+  lawyerId?: string;
   title: string;
   caseNumber: string;
   client: {
@@ -16,8 +17,6 @@ export interface Case {
   };
   status: 'In Progress' | 'Pending' | 'Closed';
   nextHearing?: string;
-  createdAt?: string;
-  updatedAt?: string; // Added if backend provides this
   documents?: string[];
   notes?: string;
 }

@@ -10,6 +10,7 @@ import { LawyerCalendar } from "./components/LawyerCalendar";
 import { LawyerClients } from "./components/LawyerClients";
 import { LawyerNotifications } from "./components/LawyerNotifications";
 import { LawyerSettings } from "./components/LawyerSettings";
+import { Profile } from "./components/Profile";
 import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
@@ -21,7 +22,9 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <BrowserRouter
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Landing />} />
@@ -91,6 +94,17 @@ const App = () => (
                 <Sidebar />
                 <div className="flex-1 overflow-auto ml-12 md:ml-0">
                   <LawyerNotifications />
+                </div>
+              </div>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <Profile />
                 </div>
               </div>
             }

@@ -1,6 +1,6 @@
 export interface Case {
   _id?: string;
-  lawyerId?: string;
+  lawyerId: string;
   title: string;
   caseNumber: string;
   client: {
@@ -8,15 +8,11 @@ export interface Case {
     phone?: string;
     email?: string;
   };
+  opponentName?: string;
   court?: string;
-  fee: {
-    total: number;
-    paid: number;
-    pending: number;
-    status: 'Completed' | 'Partial' | 'Pending';
-  };
-  status: 'In Progress' | 'Pending' | 'Closed';
+  status: "In Progress" | "Pending" | "Closed";
   nextHearing?: string;
-  documents?: string[];
+  createdAt?: Date;
+  documents: string[];
   notes?: string;
 }

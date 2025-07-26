@@ -5,6 +5,9 @@ import dotenv from "dotenv";
 import connectDB from "./dbconnect";
 import caseRoutes from "./routes/caseRoutes";
 import lawyerRoutes from "./routes/LawyerRoutes"; // Add this
+import SettingsRoutes from "./routes/SettingsRoutes";
+import FeeRoutes from "./routes/feeRoutes";
+import CalendarRoutes from "./routes/calendarRoutes";
 
 dotenv.config();
 
@@ -21,6 +24,9 @@ app.get("/", (req, res) => {
 
 app.use("/api/cases", caseRoutes);
 app.use("/lawyers", lawyerRoutes); // Add this
+app.use("/api/settings", SettingsRoutes);
+app.use("/api/fees", FeeRoutes);
+app.use("/api/calendar", CalendarRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

@@ -60,7 +60,9 @@ export const Login = () => {
       const errorMsg =
         err.response?.status === 401
           ? "Invalid email or password. Please try again."
-          : err.response?.data?.error || err.message || "Failed to sign in. Please try again.";
+          : err.response?.data?.error ||
+            err.message ||
+            "Failed to sign in. Please try again.";
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -149,7 +151,10 @@ export const Login = () => {
                     Remember me
                   </Label>
                 </div>
-                <Link to="/forgot-password" className="text-sm text-primary hover:underline">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-primary hover:underline"
+                >
                   Forgot password?
                 </Link>
               </div>

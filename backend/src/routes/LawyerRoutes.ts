@@ -57,7 +57,10 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your_jwt_secret");
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "your_jwt_secret"
+    );
     (req as any).user = decoded; // Attach user to request
     next();
   } catch (err) {
@@ -138,7 +141,8 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
     // Custom validation for Pakistani phone numbers
     if (!/^\+?92[0-9]{10}$|^0[3][0-9]{9}$/.test(sanitizedData.phoneNumber)) {
       return res.status(400).json({
-        error: "Invalid phone number. Use format like 03335759985 or +923335759985",
+        error:
+          "Invalid phone number. Use format like 03335759985 or +923335759985",
       });
     }
 
@@ -180,7 +184,10 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
           ).toLocaleString()}</p>
         `,
       });
-      console.log("Verification email sent successfully to:", sanitizedData.email);
+      console.log(
+        "Verification email sent successfully to:",
+        sanitizedData.email
+      );
     } catch (emailError) {
       console.error("Failed to send verification email:", emailError);
       // Log the failure but proceed with success response since data is saved
@@ -301,38 +308,46 @@ router.post("/verify-email", async (req: Request, res: Response) => {
 });
 
 // POST resend verification code
-router.post("/resend-verification", resendLimiter, async (req: Request, res: Response) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({ error: "Email is required" });
-    }
-
-    const sanitizedEmail = sanitizeHtml(email.trim().toLowerCase());
-    const lawyer = await Lawyer.findOne({ email: sanitizedEmail });
-    if (!lawyer) {
-      return res.status(404).json({ error: "Account not found" });
-    }
-
-    if (lawyer.isVerified) {
-      return res.status(400).json({ error: "Account already verified" });
-    }
-
-    const verificationCode = generateVerificationCode();
-    const verificationCodeExpires = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
-    lawyer.verificationCode = verificationCode;
-    lawyer.verificationCodeExpires = verificationCodeExpires;
-
-    await lawyer.save();
-    console.log("New verification code generated and saved for:", sanitizedEmail);
-
+router.post(
+  "/resend-verification",
+  resendLimiter,
+  async (req: Request, res: Response) => {
     try {
-      await transporter.sendMail({
-        from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
-        to: sanitizedEmail,
-        subject: "Verify Your Lawyer's Case Diary Account",
-        html: `
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const sanitizedEmail = sanitizeHtml(email.trim().toLowerCase());
+      const lawyer = await Lawyer.findOne({ email: sanitizedEmail });
+      if (!lawyer) {
+        return res.status(404).json({ error: "Account not found" });
+      }
+
+      if (lawyer.isVerified) {
+        return res.status(400).json({ error: "Account already verified" });
+      }
+
+      const verificationCode = generateVerificationCode();
+      const verificationCodeExpires = new Date(
+        Date.now() + 48 * 60 * 60 * 1000
+      ); // 48 hours
+      lawyer.verificationCode = verificationCode;
+      lawyer.verificationCodeExpires = verificationCodeExpires;
+
+      await lawyer.save();
+      console.log(
+        "New verification code generated and saved for:",
+        sanitizedEmail
+      );
+
+      try {
+        await transporter.sendMail({
+          from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+          to: sanitizedEmail,
+          subject: "Verify Your Lawyer's Case Diary Account",
+          html: `
           <h2>Welcome to Lawyer's Case Diary!</h2>
           <p>Please use the following code to verify your email address:</p>
           <h3>${verificationCode}</h3>
@@ -340,22 +355,28 @@ router.post("/resend-verification", resendLimiter, async (req: Request, res: Res
             Date.now() + 48 * 60 * 60 * 1000
           ).toLocaleString()}</p>
         `,
-      });
-      console.log("Resend verification email sent successfully to:", sanitizedEmail);
-    } catch (emailError) {
-      console.error("Failed to send resend verification email:", emailError);
-      return res.status(500).json({ error: "Failed to send verification email" });
-    }
+        });
+        console.log(
+          "Resend verification email sent successfully to:",
+          sanitizedEmail
+        );
+      } catch (emailError) {
+        console.error("Failed to send resend verification email:", emailError);
+        return res
+          .status(500)
+          .json({ error: "Failed to send verification email" });
+      }
 
-    res.json({ message: "Verification code resent successfully" });
-  } catch (err) {
-    console.error("Resend verification error details:", err);
-    if (err instanceof MongooseError) {
-      return res.status(500).json({ error: "Database error during resend" });
+      res.json({ message: "Verification code resent successfully" });
+    } catch (err) {
+      console.error("Resend verification error details:", err);
+      if (err instanceof MongooseError) {
+        return res.status(500).json({ error: "Database error during resend" });
+      }
+      res.status(500).json({ error: "Failed to resend verification code" });
     }
-    res.status(500).json({ error: "Failed to resend verification code" });
   }
-});
+);
 
 // POST complete subscription
 router.post("/complete-subscription", async (req: Request, res: Response) => {

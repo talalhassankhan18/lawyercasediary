@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document } from "mongoose";
 
 export interface ICase extends Document {
   lawyerId: string;
@@ -10,17 +10,12 @@ export interface ICase extends Document {
     email?: string;
   };
   court?: string;
-  fee: {
-    total: number;
-    paid: number;
-    pending: number;
-    status: 'Completed' | 'Partial' | 'Pending';
-  };
-  status: 'In Progress' | 'Pending' | 'Closed';
+  status: "In Progress" | "Pending" | "Closed";
   nextHearing?: string;
   createdAt: Date;
   documents: string[];
   notes?: string;
+  opponentName?: string; // Added opponentName
 }
 
 const caseSchema = new Schema<ICase>({
@@ -33,29 +28,20 @@ const caseSchema = new Schema<ICase>({
     email: { type: String, trim: true },
   },
   court: { type: String, trim: true, maxlength: 100 },
-  fee: {
-    total: { type: Number, default: 0 },
-    paid: { type: Number, default: 0 },
-    pending: { type: Number, default: 0 },
-    status: {
-      type: String,
-      enum: ['Completed', 'Partial', 'Pending'],
-      default: 'Pending',
-    },
-  },
   status: {
     type: String,
-    enum: ['In Progress', 'Pending', 'Closed'],
-    default: 'Pending',
+    enum: ["In Progress", "Pending", "Closed"],
+    default: "Pending",
   },
   nextHearing: { type: String },
   createdAt: { type: Date, default: Date.now },
   documents: [{ type: String }],
   notes: { type: String, trim: true },
+  opponentName: { type: String, trim: true, maxlength: 100 }, // Added to schema
 });
 
-const Case = mongoose.model<ICase>('Case', caseSchema);
+const Case = mongoose.model<ICase>("Case", caseSchema);
 
-console.log('✅ Case model initialized');
+console.log("✅ Case model initialized");
 
 export default Case;

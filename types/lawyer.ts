@@ -1,8 +1,22 @@
-// types/lawyer.ts
 export interface Lawyer {
-  _id?: string;
+  _id: string;
   firstName: string;
   lastName: string;
   email: string;
-  // Add other fields as per your backend (e.g., role, lawyerId, etc.)
+  password: string;
+  firmName: string;
+  phoneNumber: string;
+  feeSecurityKey: string;
+  verificationCode?: string;
+  verificationCodeExpires?: Date;
+  isVerified: boolean;
+  subscription: {
+    plan: string;
+    status: "Active" | "Pending" | "Cancelled";
+    trialEnd?: Date;
+  };
+  twoFactorEnabled: boolean;
+  sessionTimeout: number;
+  loginAlerts: boolean;
+  createdAt: Date;
 }

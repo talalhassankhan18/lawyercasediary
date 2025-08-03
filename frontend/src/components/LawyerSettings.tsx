@@ -82,12 +82,35 @@ export const LawyerSettings = () => {
       if (!token) {
         throw new Error("No authentication token found");
       }
-      console.log("Fetching settings from:", `${API_URL}/api/settings`);
-      const res = await axios.get(`${API_URL}/api/settings`, {
+      console.log("Fetching lawyer data from:", `${API_URL}/lawyers/me`);
+      const lawyerRes = await axios.get(`${API_URL}/lawyers/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log("Settings fetched successfully:", res.data);
-      setSettings(res.data);
+      console.log("Fetching settings from:", `${API_URL}/api/settings`);
+      const settingsRes = await axios.get(`${API_URL}/api/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log("Lawyer data fetched:", lawyerRes.data);
+      console.log("Settings fetched:", settingsRes.data);
+      setSettings({
+        profile: {
+          name: `${lawyerRes.data.user.firstName} ${lawyerRes.data.user.lastName}`,
+          email: lawyerRes.data.user.email,
+          phone: lawyerRes.data.user.phoneNumber || "",
+          barNumber: settingsRes.data.profile.barNumber || "",
+          experience: settingsRes.data.profile.experience || "",
+          specialization: settingsRes.data.profile.specialization || "",
+          address: settingsRes.data.profile.address || "",
+          bio: settingsRes.data.profile.bio || "",
+          profilePicture: lawyerRes.data.user.profilePicture || "",
+        },
+        security: {
+          twoFactorEnabled: lawyerRes.data.user.twoFactorEnabled,
+          sessionTimeout: lawyerRes.data.user.sessionTimeout,
+          loginAlerts: lawyerRes.data.user.loginAlerts,
+          feeManagementPin: "",
+        },
+      });
     } catch (err: any) {
       console.error(
         "Error fetching settings:",
@@ -115,7 +138,7 @@ export const LawyerSettings = () => {
     const { name, value } = e.target;
     setSettings({
       ...settings,
-      profile: { ...settings.profile, [name]: value || "" }, // Ensure empty strings are set
+      profile: { ...settings.profile, [name]: value || "" },
     });
   };
 
@@ -175,26 +198,51 @@ export const LawyerSettings = () => {
         console.log("Profile picture uploaded:", profilePicture);
       }
 
-      // Update profile data
-      const profileData = {
-        ...settings.profile,
+      // Split name into firstName and lastName
+      const nameParts = settings.profile.name.trim().split(" ");
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      // Update Lawyer model
+      const lawyerData = {
+        firstName,
+        lastName,
+        email: settings.profile.email,
+        phoneNumber: settings.profile.phone || "",
         profilePicture: profilePicture || "",
-        phone: settings.profile.phone || "",
-        barNumber: settings.profile.barNumber || "",
-        experience: settings.profile.experience || "",
-        specialization: settings.profile.specialization || "",
-        address: settings.profile.address || "",
-        bio: settings.profile.bio || "",
       };
-      console.log("Submitting profile update:", profileData);
-      const response = await axios.put(
-        `${API_URL}/api/settings/profile`,
-        { profile: profileData },
+      console.log("Submitting lawyer profile update:", lawyerData);
+      const lawyerResponse = await axios.put(
+        `${API_URL}/lawyers/profile`,
+        lawyerData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      console.log("Profile update successful:", response.data);
-      setSettings({ ...settings, profile: response.data.profile }); // Update state with response
-      setSelectedFile(null); // Clear file input
+      console.log("Lawyer profile updated:", lawyerResponse.data);
+
+      // Update Settings model
+      const settingsData = {
+        profile: {
+          name: settings.profile.name,
+          email: settings.profile.email,
+          phone: settings.profile.phone || "",
+          barNumber: settings.profile.barNumber || "",
+          experience: settings.profile.experience || "",
+          specialization: settings.profile.specialization || "",
+          address: settings.profile.address || "",
+          bio: settings.profile.bio || "",
+          profilePicture: profilePicture || "",
+        },
+      };
+      console.log("Submitting settings profile update:", settingsData);
+      const settingsResponse = await axios.put(
+        `${API_URL}/api/settings/profile`,
+        settingsData,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      console.log("Settings profile updated:", settingsResponse.data);
+
+      setSettings({ ...settings, profile: settingsResponse.data.profile });
+      setSelectedFile(null);
       toast.success("Profile updated successfully");
     } catch (err: any) {
       console.error(

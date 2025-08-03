@@ -14,6 +14,7 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "../components/ui/input-otp";
+import { Avatar, AvatarImage, AvatarFallback } from "../components/ui/avatar";
 import {
   Scale,
   Eye,
@@ -22,6 +23,7 @@ import {
   ArrowRight,
   Mail,
   Shield,
+  Camera,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -43,7 +45,9 @@ export const Signup = () => {
     feeSecurityKey: "",
     firmName: "",
     phoneNumber: "",
+    profilePicture: "",
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [timeZoneOffset, setTimeZoneOffset] = useState(0);
 
@@ -79,6 +83,13 @@ export const Signup = () => {
         newErrors.phoneNumber =
           "Invalid phone number. Use format like 03335759985 or +923335759985";
       }
+      if (selectedFile && selectedFile.size > 2 * 1024 * 1024)
+        newErrors.profilePicture = "Image size must be less than 2MB";
+      else if (
+        selectedFile &&
+        !["image/jpeg", "image/png"].includes(selectedFile.type)
+      )
+        newErrors.profilePicture = "Only JPG and PNG files are allowed";
     } else if (step === 2) {
       if (!formData.password) newErrors.password = "Password is required";
       else if (
@@ -109,6 +120,15 @@ export const Signup = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      setErrors((prev) => ({ ...prev, profilePicture: "" }));
+      console.log("Selected file:", file.name);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -124,11 +144,36 @@ export const Signup = () => {
         if (!validateStep()) {
           throw new Error("Please correct the form errors");
         }
+        let profilePicture = formData.profilePicture;
+
+        // Upload profile picture if selected
+        if (selectedFile) {
+          const formDataUpload = new FormData();
+          formDataUpload.append("profilePicture", selectedFile);
+          console.log("Uploading profile picture");
+          const uploadResponse = await axios.post(
+            "http://localhost:5000/lawyers/profile-picture",
+            formDataUpload,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+            }
+          );
+          profilePicture = uploadResponse.data.profilePicture;
+          console.log("Profile picture uploaded:", profilePicture);
+        }
+
         const response = await axios.post(
           "http://localhost:5000/lawyers/signup",
-          formData
+          {
+            ...formData,
+            profilePicture: profilePicture || "",
+          }
         );
         toast.success(response.data.message);
+        setFormData((prev) => ({ ...prev, profilePicture }));
+        setSelectedFile(null);
         setStep(3);
       } else if (step === 3) {
         if (!validateStep()) {
@@ -140,7 +185,7 @@ export const Signup = () => {
             email: formData.email,
             verificationCode,
           },
-          { timeout: 10000 } // 10-second timeout
+          { timeout: 10000 }
         );
         toast.success(response.data.message);
         setStep(4);
@@ -156,7 +201,7 @@ export const Signup = () => {
         toast.success(response.data.message);
         navigate("/login");
       }
-    } catch (error) {
+    } catch (error: any) {
       const errorMsg =
         error.response?.data?.error ||
         error.message ||
@@ -173,18 +218,18 @@ export const Signup = () => {
   const handleResendCode = async () => {
     try {
       setLoading(true);
-      console.log("Attempting to resend code for email:", formData.email); // Debug log
+      console.log("Attempting to resend code for email:", formData.email);
       const response = await axios.post(
         "http://localhost:5000/lawyers/resend-verification",
         {
           email: formData.email,
         },
-        { timeout: 20000 } // Increased to 20 seconds
+        { timeout: 20000 }
       );
       toast.success(response.data.message);
-      console.log("Resend successful:", response.data.message); // Debug log
-    } catch (error) {
-      console.error("Resend error:", error); // Debug log
+      console.log("Resend successful:", response.data.message);
+    } catch (error: any) {
+      console.error("Resend error:", error);
       toast.error(
         error.response?.data?.error || "Failed to resend verification code"
       );
@@ -213,6 +258,46 @@ export const Signup = () => {
       case 1:
         return (
           <div className="space-y-4">
+            <div className="flex flex-col items-center gap-4">
+              <Avatar className="h-20 w-20">
+                {formData.profilePicture ? (
+                  <AvatarImage
+                    src={formData.profilePicture}
+                    alt="Profile Picture"
+                  />
+                ) : (
+                  <AvatarFallback className="bg-blue-500 text-white text-xl">
+                    {formData.firstName && formData.lastName
+                      ? `${formData.firstName[0]}${formData.lastName[0]}`
+                      : "JD"}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              <div className="text-center">
+                <Label htmlFor="profile-picture" className="cursor-pointer">
+                  <Button variant="outline" size="sm" asChild>
+                    <div>
+                      <Camera className="w-4 h-4 mr-2" />
+                      Upload Photo
+                    </div>
+                  </Button>
+                </Label>
+                <Input
+                  id="profile-picture"
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <p className="text-sm text-gray-500 mt-1">JPG, PNG up to 2MB</p>
+                {errors.profilePicture && (
+                  <p className="text-xs text-destructive">
+                    {errors.profilePicture}
+                  </p>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="firstName">First Name</Label>

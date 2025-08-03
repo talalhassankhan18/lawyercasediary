@@ -9,6 +9,7 @@ export interface ILawyer extends Document {
   firmName: string;
   phoneNumber: string;
   feeSecurityKey: string;
+  profilePicture?: string;
   verificationCode?: string;
   verificationCodeExpires?: Date;
   isVerified: boolean;
@@ -40,6 +41,7 @@ const lawyerSchema = new Schema<ILawyer>({
   firmName: { type: String, required: true, trim: true, maxlength: 100 },
   phoneNumber: { type: String, required: true, trim: true, maxlength: 15 },
   feeSecurityKey: { type: String, required: true },
+  profilePicture: { type: String, trim: true },
   verificationCode: { type: String },
   verificationCodeExpires: { type: Date },
   isVerified: { type: Boolean, default: false },

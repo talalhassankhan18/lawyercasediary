@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
   FolderOpen,
@@ -37,6 +37,7 @@ export const Sidebar = () => {
   const [isLoading, setIsLoading] = useState(false);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const fetchLawyerData = async () => {
     setIsLoading(true);
@@ -48,18 +49,18 @@ export const Sidebar = () => {
         navigate("/login");
         return;
       }
-      const res = await axios.get(`${API_URL}/api/settings`, {
+      const res = await axios.get(`${API_URL}/lawyers/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log("Settings data response:", res.data);
+      console.log("Lawyer data response:", res.data);
       setLawyerData({
-        name: res.data.profile.name,
-        email: res.data.profile.email,
-        profilePicture: res.data.profile.profilePicture || "",
+        name: `${res.data.user.firstName} ${res.data.user.lastName}`,
+        email: res.data.user.email,
+        profilePicture: res.data.user.profilePicture || "",
       });
     } catch (err: any) {
       console.error(
-        "Error fetching settings data:",
+        "Error fetching lawyer data:",
         err.response?.data || err.message
       );
       if (err.response?.status === 401) {
@@ -77,13 +78,14 @@ export const Sidebar = () => {
   const handleLogout = () => {
     localStorage.removeItem("authToken");
     setLawyerData(null);
+    setIsFeeUnlocked(false); // Reset PIN state on logout
     toast.success("Logged out successfully");
     navigate("/");
   };
 
   useEffect(() => {
     fetchLawyerData();
-  }, []);
+  }, [location.pathname]); // Re-fetch when pathname changes
 
   const handlePinSubmit = async (pin: string) => {
     try {
@@ -220,7 +222,7 @@ export const Sidebar = () => {
             effectivelyCollapsed ? "px-1" : ""
           }`}
         >
-          {!effectivelyCollapsed && lawyerData && !isLoading && (
+          {!effectivelyCollapsed && !isLoading && lawyerData ? (
             <div className="text-xs text-gray-400 space-y-2">
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
@@ -255,7 +257,9 @@ export const Sidebar = () => {
                 Logout
               </Button>
             </div>
-          )}
+          ) : !effectivelyCollapsed && isLoading ? (
+            <div className="text-center text-gray-400">Loading profile...</div>
+          ) : null}
         </div>
       </div>
 

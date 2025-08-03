@@ -7,6 +7,7 @@ export interface Lawyer {
   firmName: string;
   phoneNumber: string;
   feeSecurityKey: string;
+  profilePicture?: string;
   verificationCode?: string;
   verificationCodeExpires?: Date;
   isVerified: boolean;

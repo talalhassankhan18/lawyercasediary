@@ -57,22 +57,34 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
   try {
     await connectDB();
     const lawyerId = (req as any).user.id;
-    const settings = await Settings.findOne({ lawyerId });
     const lawyer = await Lawyer.findById(lawyerId).select(
-      "twoFactorEnabled sessionTimeout loginAlerts"
+      "firstName lastName email phoneNumber profilePicture twoFactorEnabled sessionTimeout loginAlerts"
     );
-    if (!settings || !lawyer) {
-      console.error("Settings or lawyer not found for lawyerId:", lawyerId);
-      return res.status(404).json({ error: "Settings or lawyer not found" });
+    const settings = await Settings.findOne({ lawyerId });
+    if (!lawyer) {
+      console.error("Lawyer not found for lawyerId:", lawyerId);
+      return res.status(404).json({ error: "Lawyer not found" });
     }
     console.log(
       "Fetched settings for lawyerId:",
       lawyerId,
-      "Profile:",
-      settings.profile
+      "Lawyer data:",
+      lawyer,
+      "Settings data:",
+      settings
     );
     res.json({
-      profile: settings.profile,
+      profile: {
+        name: `${lawyer.firstName} ${lawyer.lastName}`,
+        email: lawyer.email,
+        phone: lawyer.phoneNumber || "",
+        barNumber: settings?.profile.barNumber || "",
+        experience: settings?.profile.experience || "",
+        specialization: settings?.profile.specialization || "",
+        address: settings?.profile.address || "",
+        bio: settings?.profile.bio || "",
+        profilePicture: lawyer.profilePicture || "",
+      },
       security: {
         twoFactorEnabled: lawyer.twoFactorEnabled,
         sessionTimeout: lawyer.sessionTimeout,
@@ -103,6 +115,15 @@ router.post(
       const profilePicture = req.file.path; // Cloudinary URL
       console.log("Profile picture uploaded to Cloudinary:", profilePicture);
 
+      // Update Lawyer model
+      await Lawyer.findByIdAndUpdate(
+        lawyerId,
+        { profilePicture, updatedAt: new Date() },
+        { runValidators: true }
+      );
+      console.log("Lawyer profile picture updated for lawyerId:", lawyerId);
+
+      // Update Settings model
       const settings = await Settings.findOneAndUpdate(
         { lawyerId },
         {
@@ -115,7 +136,7 @@ router.post(
       );
 
       console.log(
-        "Profile picture updated successfully for lawyerId:",
+        "Settings profile picture updated successfully for lawyerId:",
         lawyerId,
         "URL:",
         profilePicture
@@ -267,12 +288,10 @@ router.put(
         !(currentPassword && newPassword && confirmPassword)
       ) {
         console.error("Incomplete password fields provided");
-        return res
-          .status(400)
-          .json({
-            error:
-              "All password fields (current, new, confirm) are required for password change",
-          });
+        return res.status(400).json({
+          error:
+            "All password fields (current, new, confirm) are required for password change",
+        });
       }
 
       // Validate feeManagementPin (feeSecurityKey) if provided

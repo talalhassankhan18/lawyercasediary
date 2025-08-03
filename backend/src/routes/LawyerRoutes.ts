@@ -1,14 +1,39 @@
-// routes/LawyerRoutes.ts
 import express, { Request, Response, NextFunction } from "express";
 import mongoose, { Error as MongooseError } from "mongoose";
 import jwt from "jsonwebtoken";
-import Lawyer, { ILawyer } from "../models/Lawyer"; // Adjust path as needed
+import Lawyer, { ILawyer } from "../models/Lawyer";
 import validator from "validator";
 import nodemailer from "nodemailer";
 import sanitizeHtml from "sanitize-html";
 import rateLimit from "express-rate-limit";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import multer from "multer";
 
 const router = express.Router();
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Configure Multer with Cloudinary storage
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req: Request, file: Express.Multer.File) => {
+    return {
+      folder: "lawyer_profiles",
+      allowed_formats: ["jpg", "png"],
+      transformation: [{ width: 200, height: 200, crop: "limit" }],
+    };
+  },
+});
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+});
 
 // Email transporter configuration
 const transporter = nodemailer.createTransport({
@@ -61,7 +86,7 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
       token,
       process.env.JWT_SECRET || "your_jwt_secret"
     );
-    (req as any).user = decoded; // Attach user to request
+    (req as any).user = decoded;
     next();
   } catch (err) {
     console.error("JWT verification error:", err);
@@ -73,6 +98,33 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 const generateVerificationCode = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
+
+// POST profile picture upload
+router.post(
+  "/profile-picture",
+  upload.single("profilePicture"),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        console.error("No file uploaded");
+        return res.status(400).json({ error: "No image file provided" });
+      }
+
+      const profilePicture = req.file.path; // Cloudinary URL
+      console.log("Profile picture uploaded to Cloudinary:", profilePicture);
+
+      res.json({
+        message: "Profile picture uploaded successfully",
+        profilePicture,
+      });
+    } catch (err: any) {
+      console.error("Profile picture upload error:", err.message);
+      res
+        .status(500)
+        .json({ error: err.message || "Failed to upload profile picture" });
+    }
+  }
+);
 
 // POST signup
 router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
@@ -86,6 +138,7 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
       feeSecurityKey,
       firmName,
       phoneNumber,
+      profilePicture,
     } = req.body;
 
     if (
@@ -98,7 +151,9 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
       !firmName ||
       !phoneNumber
     ) {
-      return res.status(400).json({ error: "All fields are required" });
+      return res
+        .status(400)
+        .json({ error: "All required fields must be provided" });
     }
 
     const sanitizedData = {
@@ -107,6 +162,7 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
       email: sanitizeHtml(email.trim().toLowerCase()),
       firmName: sanitizeHtml(firmName.trim()),
       phoneNumber: sanitizeHtml(phoneNumber.trim()),
+      profilePicture: profilePicture ? sanitizeHtml(profilePicture.trim()) : "",
     };
 
     if (!validator.isEmail(sanitizedData.email)) {
@@ -138,7 +194,6 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
         .json({ error: "Fee security key must be a 4-digit number" });
     }
 
-    // Custom validation for Pakistani phone numbers
     if (!/^\+?92[0-9]{10}$|^0[3][0-9]{9}$/.test(sanitizedData.phoneNumber)) {
       return res.status(400).json({
         error:
@@ -152,12 +207,13 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
     }
 
     const verificationCode = generateVerificationCode();
-    const verificationCodeExpires = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+    const verificationCodeExpires = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
     const lawyer = new Lawyer({
       ...sanitizedData,
       password,
       feeSecurityKey,
+      profilePicture: sanitizedData.profilePicture,
       verificationCode,
       verificationCodeExpires,
       subscription: {
@@ -190,7 +246,6 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
       );
     } catch (emailError) {
       console.error("Failed to send verification email:", emailError);
-      // Log the failure but proceed with success response since data is saved
     }
 
     res
@@ -250,6 +305,8 @@ router.post("/login", loginLimiter, async (req: Request, res: Response) => {
         lastName: lawyer.lastName,
         email: lawyer.email,
         firmName: lawyer.firmName,
+        phoneNumber: lawyer.phoneNumber,
+        profilePicture: lawyer.profilePicture,
       },
     });
   } catch (err) {
@@ -289,11 +346,10 @@ router.post("/verify-email", async (req: Request, res: Response) => {
         .json({ error: "Invalid or expired verification code" });
     }
 
-    // Update only necessary fields to avoid re-validating feeSecurityKey
     lawyer.isVerified = true;
     lawyer.verificationCode = undefined;
     lawyer.verificationCodeExpires = undefined;
-    await lawyer.save({ validateModifiedOnly: true }); // Validate only modified fields
+    await lawyer.save({ validateModifiedOnly: true });
 
     res.json({ message: "Email verified successfully" });
   } catch (err) {
@@ -332,7 +388,7 @@ router.post(
       const verificationCode = generateVerificationCode();
       const verificationCodeExpires = new Date(
         Date.now() + 48 * 60 * 60 * 1000
-      ); // 48 hours
+      );
       lawyer.verificationCode = verificationCode;
       lawyer.verificationCodeExpires = verificationCodeExpires;
 
@@ -432,6 +488,11 @@ router.get("/me", authenticateToken, async (req: Request, res: Response) => {
         lastName: lawyer.lastName,
         email: lawyer.email,
         firmName: lawyer.firmName,
+        phoneNumber: lawyer.phoneNumber,
+        profilePicture: lawyer.profilePicture,
+        twoFactorEnabled: lawyer.twoFactorEnabled,
+        sessionTimeout: lawyer.sessionTimeout,
+        loginAlerts: lawyer.loginAlerts,
       },
     });
   } catch (err) {
@@ -439,5 +500,114 @@ router.get("/me", authenticateToken, async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to retrieve user data" });
   }
 });
+
+// PUT update profile
+router.put(
+  "/profile",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const lawyerId = (req as any).user.id;
+      const { firstName, lastName, email, phoneNumber, profilePicture } =
+        req.body;
+
+      if (!firstName || !lastName || !email) {
+        console.error(
+          "Invalid profile data for lawyerId:",
+          lawyerId,
+          "Received:",
+          req.body
+        );
+        return res
+          .status(400)
+          .json({ error: "First name, last name, and email are required" });
+      }
+
+      const sanitizedData = {
+        firstName: sanitizeHtml(firstName.trim()),
+        lastName: sanitizeHtml(lastName.trim()),
+        email: sanitizeHtml(email.trim().toLowerCase()),
+        phoneNumber: phoneNumber ? sanitizeHtml(phoneNumber.trim()) : "",
+        profilePicture: profilePicture
+          ? sanitizeHtml(profilePicture.trim())
+          : "",
+      };
+
+      if (!validator.isEmail(sanitizedData.email)) {
+        return res.status(400).json({ error: "Invalid email address" });
+      }
+
+      if (
+        sanitizedData.phoneNumber &&
+        !/^\+?92[0-9]{10}$|^0[3][0-9]{9}$/.test(sanitizedData.phoneNumber)
+      ) {
+        return res.status(400).json({
+          error:
+            "Invalid phone number. Use format like 03335759985 or +923335759985",
+        });
+      }
+
+      const existingLawyer = await Lawyer.findOne({
+        email: sanitizedData.email,
+        _id: { $ne: lawyerId },
+      });
+      if (existingLawyer) {
+        return res.status(400).json({ error: "Email already in use" });
+      }
+
+      const updatedLawyer = await Lawyer.findByIdAndUpdate(
+        lawyerId,
+        {
+          $set: {
+            firstName: sanitizedData.firstName,
+            lastName: sanitizedData.lastName,
+            email: sanitizedData.email,
+            phoneNumber: sanitizedData.phoneNumber,
+            profilePicture: sanitizedData.profilePicture,
+            updatedAt: new Date(),
+          },
+        },
+        { new: true, runValidators: true }
+      );
+
+      if (!updatedLawyer) {
+        console.error("Lawyer not found for lawyerId:", lawyerId);
+        return res.status(404).json({ error: "Lawyer not found" });
+      }
+
+      console.log(
+        "Profile updated successfully for lawyerId:",
+        lawyerId,
+        "Updated data:",
+        updatedLawyer
+      );
+
+      res.json({
+        message: "Profile updated successfully",
+        user: {
+          id: updatedLawyer._id,
+          firstName: updatedLawyer.firstName,
+          lastName: updatedLawyer.lastName,
+          email: updatedLawyer.email,
+          phoneNumber: updatedLawyer.phoneNumber,
+          profilePicture: updatedLawyer.profilePicture,
+        },
+      });
+    } catch (err: any) {
+      console.error("Update profile error:", err.message);
+      if (err instanceof MongooseError.ValidationError) {
+        res
+          .status(400)
+          .json({ error: "Validation error", details: err.errors });
+      } else if (err instanceof MongooseError && (err as any).code === 11000) {
+        res.status(400).json({ error: "Email already in use" });
+      } else {
+        res
+          .status(500)
+          .json({ error: err.message || "Failed to update profile" });
+      }
+    }
+  }
+);
 
 export default router;

@@ -5,9 +5,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
 import { CaseManagement } from "./components/CaseManagement";
+import { TodaysDiary } from "./components/TodaysDiary";
 import { FeeManagement } from "./components/FeeManagement";
 import { LawyerCalendar } from "./components/LawyerCalendar";
 import { LawyerClients } from "./components/LawyerClients";
+import { LawyerAnalytics } from "./components/LawyerAnalytics";
 import { LawyerNotifications } from "./components/LawyerNotifications";
 import { LawyerSettings } from "./components/LawyerSettings";
 import { Profile } from "./components/Profile";
@@ -15,6 +17,8 @@ import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import NotFound from "./pages/NotFound";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +34,8 @@ const App = () => (
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* Protected Dashboard Routes */}
           <Route
@@ -50,6 +56,17 @@ const App = () => (
                 <Sidebar />
                 <div className="flex-1 overflow-auto ml-12 md:ml-0">
                   <CaseManagement />
+                </div>
+              </div>
+            }
+          />
+          <Route
+            path="/today"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <TodaysDiary />
                 </div>
               </div>
             }
@@ -83,6 +100,17 @@ const App = () => (
                 <Sidebar />
                 <div className="flex-1 overflow-auto ml-12 md:ml-0">
                   <LawyerClients />
+                </div>
+              </div>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <div className="flex min-h-screen bg-gray-50">
+                <Sidebar />
+                <div className="flex-1 overflow-auto ml-12 md:ml-0">
+                  <LawyerAnalytics />
                 </div>
               </div>
             }

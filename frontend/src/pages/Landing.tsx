@@ -182,22 +182,13 @@ const carouselImages = [
 ];
 
 const allFeatures = [
-  "Complete Case Management System",
-  "Smart Calendar & Scheduling",
-  "Secure Document Storage & Management",
-  "Client Portal & Communication Hub",
-  "Comprehensive Fee & Billing Management",
-  "Time Tracking & Invoice Generation",
-  "Smart Notifications & Reminders",
-  "Advanced Analytics & Reporting",
-  "Custom Workflows & Templates",
-  "Bank-Level Security & Encryption",
-  "Multi-Device Access (Web, Mobile)",
-  "Automated Backup & Data Recovery",
-  "Legal Compliance Monitoring",
-  "Integration with Court Systems",
-  "Priority Customer Support",
-  "Training & Onboarding Assistance",
+  "Complete Case Management",
+  "Hearing Tracking & Scheduling",
+  "Professional Fee Management",
+  "Automated Daily Dairy Reports",
+  "Secure PIN-based Financial Vault",
+  "Client & Contact Management",
+  "Instant Invoice Generation",
 ];
 
 export const Landing = () => {
@@ -216,25 +207,20 @@ export const Landing = () => {
       <Navbar />
 
       {/* Hero Section */}
-      <section className="pt-20 pb-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-primary/5 via-background to-secondary/10">
+      <section className="pt-24 pb-20 px-4 sm:px-6 lg:px-8 bg-background border-b border-border/50">
         <div className="max-w-7xl mx-auto text-center">
           <div className="inline-flex items-center px-4 py-2 bg-primary/10 rounded-full text-primary text-sm font-medium mb-6">
             <Award className="w-4 h-4 mr-2" />
             Trusted by 10,000+ Legal Professionals
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold text-foreground mb-6 leading-tight">
-            <span className="text-primary animate-fade-in">
-              Revolutionary Legal
-            </span>
-            <br />
-            <span className="text-primary block">Practice Management</span>
+          <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold font-outfit text-foreground mb-6 tracking-tight leading-tight">
+            Transform Your <br />
+            <span className="text-primary italic">Legal Practice</span>
           </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed">
-            Transform your legal practice with{" "}
-            <strong>Lawyer's Case Diary</strong> - the all-in-one solution that
-            combines case management, client communication, billing, and
-            analytics in one powerful, secure platform designed exclusively for
-            legal professionals.
+
+          <p className="text-base sm:text-lg text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed font-inter">
+            Experience the next generation of <strong>Legal Practice Management</strong>.
+            Streamlined, secure, and built for the modern lawyer.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <Button
@@ -294,9 +280,8 @@ export const Landing = () => {
                   <button
                     key={index}
                     onClick={() => setCurrentSlide(index)}
-                    className={`w-3 h-3 rounded-full transition-colors ${
-                      index === currentSlide ? "bg-primary" : "bg-gray-300"
-                    }`}
+                    className={`w-3 h-3 rounded-full transition-colors ${index === currentSlide ? "bg-primary" : "bg-gray-300"
+                      }`}
                   />
                 ))}
               </div>
@@ -308,11 +293,11 @@ export const Landing = () => {
       {/* Benefits Section */}
       <section className="py-16 px-4 sm:px-6 lg:px-8 bg-muted/50">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">
               Why Choose Lawyer's Case Diary?
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-sm text-muted-foreground max-w-xl mx-auto">
               Join thousands of legal professionals who have transformed their
               practice with our comprehensive platform.
             </p>
@@ -324,17 +309,17 @@ export const Landing = () => {
                 key={index}
                 className="text-center hover:shadow-lg transition-shadow"
               >
-                <CardHeader>
-                  <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                    <benefit.icon className="w-8 h-8 text-primary" />
+                <CardHeader className="p-4">
+                  <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3">
+                    <benefit.icon className="w-6 h-6 text-primary" />
                   </div>
-                  <CardTitle className="text-xl">{benefit.title}</CardTitle>
-                  <div className="text-2xl font-bold text-primary">
+                  <CardTitle className="text-lg">{benefit.title}</CardTitle>
+                  <div className="text-xl font-bold text-primary">
                     {benefit.stat}
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-base">
+                <CardContent className="px-4 pb-4">
+                  <CardDescription className="text-sm">
                     {benefit.description}
                   </CardDescription>
                 </CardContent>
@@ -347,11 +332,11 @@ export const Landing = () => {
       {/* Features Section */}
       <section className="py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">
               Everything You Need in One Platform
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-base text-muted-foreground max-w-xl mx-auto">
               From case management to billing and client communication, we've
               got all the tools you need to run your practice efficiently.
             </p>
@@ -426,13 +411,12 @@ export const Landing = () => {
       {/* Pricing Section */}
       <section className="py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">
               Simple, Transparent Pricing
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              One comprehensive plan with all features included. No hidden fees,
-              no feature limitations.
+            <p className="text-base text-muted-foreground max-w-xl mx-auto">
+              Get full access to all features with a simple one-time payment. No monthly bills, forever.
             </p>
           </div>
 
@@ -444,15 +428,15 @@ export const Landing = () => {
                 </span>
               </div>
               <CardHeader className="text-center pt-8">
-                <CardTitle className="text-3xl">Professional Plan</CardTitle>
-                <div className="flex items-baseline justify-center">
-                  <span className="text-5xl font-bold text-foreground">
-                    $99
+                <CardTitle className="text-2xl font-outfit font-bold">Professional Access</CardTitle>
+                <div className="flex items-baseline justify-center mt-4">
+                  <span className="text-4xl font-black text-foreground font-outfit tracking-tighter">
+                    Rs 40k
                   </span>
-                  <span className="text-muted-foreground ml-2">/month</span>
+                  <span className="text-muted-foreground ml-2 text-base">one-time</span>
                 </div>
-                <CardDescription className="text-lg mt-2">
-                  Everything you need to manage your legal practice efficiently
+                <CardDescription className="text-sm mt-3 max-w-[80%] mx-auto">
+                  Invest once in your practice. Own the most advanced legal toolset forever.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">

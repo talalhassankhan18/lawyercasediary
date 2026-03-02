@@ -272,12 +272,7 @@ router.get(
           ? format(parseISO(case_.nextHearing), "HH:mm")
           : "TBD",
         location: case_.court || "N/A",
-        status:
-          case_.status === "Pending"
-            ? "pending"
-            : case_.status === "In Progress"
-            ? "confirmed"
-            : "closed",
+        status: case_.status,
         createdAt: case_.createdAt,
         caseDetails: {
           caseNumber: case_.caseNumber,
@@ -289,6 +284,88 @@ router.get(
       res
         .status(500)
         .json({ error: err.message || "Failed to fetch hearings" });
+    }
+  }
+);
+
+router.get(
+  "/conflicts",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      await connectDB();
+      const lawyerId = (req as any).user.id;
+      const { date } = req.query;
+
+      if (!date || typeof date !== "string") {
+        return res.status(400).json({ error: "Date is required (YYYY-MM-DD)" });
+      }
+
+      // Find cases with hearing on this exact date
+      const cases = await Case.find({ lawyerId, nextHearing: date });
+
+      res.json({
+        hasConflict: cases.length > 0,
+        count: cases.length,
+        cases: cases.map(c => ({
+          _id: String(c._id),
+          title: c.title,
+          caseNumber: c.caseNumber,
+          court: c.court
+        }))
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to check conflicts" });
+    }
+  }
+);
+
+router.get(
+  "/export",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      await connectDB();
+      const lawyerId = (req as any).user.id;
+
+      // Get all cases with future hearings
+      const today = startOfDay(new Date()).toISOString().split("T")[0];
+      const cases = await Case.find({
+        lawyerId,
+        nextHearing: { $gte: today }
+      });
+
+      // Construct iCalendar (.ics) format string manually
+      let icsContent = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//LawyersCaseDiary//EN\r\nCALSCALE:GREGORIAN\r\n";
+
+      cases.forEach(c => {
+        if (!c.nextHearing) return;
+
+        // Format YYYYMMDD
+        const dateStr = c.nextHearing.replace(/-/g, "");
+        const uuid = String(c._id) + "@lawyerscasediary.com";
+        const dtstamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+
+        icsContent += "BEGIN:VEVENT\r\n";
+        icsContent += `UID:${uuid}\r\n`;
+        icsContent += `DTSTAMP:${dtstamp}\r\n`;
+        // All-day event start and end
+        icsContent += `DTSTART;VALUE=DATE:${dateStr}\r\n`;
+        // End date should be +1 day according to ICS spec, but for simplicity we can just supply start date
+
+        icsContent += `SUMMARY:Hearing - ${c.title} (${c.client.name})\r\n`;
+        icsContent += `DESCRIPTION:Case Number: ${c.caseNumber}\\nCourt: ${c.court || 'N/A'}\\nOpponent: ${c.opponentName || 'N/A'}\r\n`;
+        if (c.court) icsContent += `LOCATION:${c.court}\r\n`;
+        icsContent += "END:VEVENT\r\n";
+      });
+
+      icsContent += "END:VCALENDAR\r\n";
+
+      res.setHeader('Content-Type', 'text/calendar');
+      res.setHeader('Content-Disposition', 'attachment; filename="hearings_calendar.ics"');
+      res.send(icsContent);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to generate calendar export" });
     }
   }
 );

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import api from "../lib/api";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -11,24 +12,34 @@ import {
   DialogTrigger,
 } from "../components/ui/dialog";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
+import { Label } from "../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import {
   Search,
   Phone,
   Mail,
-  MapPin,
-  Calendar,
-  FileText,
+  User,
   Eye,
+  MessageSquare,
+  Briefcase,
+  History,
+  Plus,
+  Trash2,
 } from "lucide-react";
-import axios from "axios";
 import { Case } from "../../../types/case";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
-// Use VITE_API_URL from environment variables
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+interface CommunicationLog {
+  _id: string;
+  date: string;
+  type: string;
+  summary: string;
+  outcome?: string;
+  createdAt: string;
+}
 
-// Define Client type based on Case model
 interface Client {
   name: string;
   email: string | "N/A";
@@ -38,6 +49,7 @@ interface Client {
   status: "Active" | "Completed";
   joinDate: string | undefined;
   totalCases: number;
+  totalFees: number;
   lastContact: string | undefined;
   nextHearing: string | undefined;
   cases: Case[];
@@ -49,72 +61,39 @@ export const LawyerClients = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [lawyerId, setLawyerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Profile Tabs
+  const [activeTab, setActiveTab] = useState<"overview" | "logs">("overview");
+
+  // Comm Logs State
+  const [logs, setLogs] = useState<CommunicationLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [isAddingLog, setIsAddingLog] = useState(false);
+
+  // New Log Form
+  const [logDate, setLogDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [logType, setLogType] = useState("Call");
+  const [logSummary, setLogSummary] = useState("");
+  const [logOutcome, setLogOutcome] = useState("");
+  const [submittingLog, setSubmittingLog] = useState(false);
+
   const navigate = useNavigate();
 
-  // Fetch lawyer ID
   useEffect(() => {
-    const fetchLawyerData = async () => {
-      const token = localStorage.getItem("authToken");
-      console.log("Auth Token from localStorage:", token);
-      if (!token) {
-        console.log("No auth token found, redirecting to login");
-        navigate("/login");
-        return;
-      }
+    const fetchLawyerAndClients = async () => {
       try {
-        const response = await axios.get(`${API_URL}/lawyers/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        console.log("Full lawyer data response:", response.data);
-        const data = response.data;
-        let id: string | undefined;
-        if (data.user && data.user.id) {
-          id = data.user.id;
-        } else if (data._id) {
-          id = data._id;
-        } else if (data.id) {
-          id = data.id;
-        } else {
-          throw new Error("Lawyer ID not found in response");
-        }
-        if (id) {
-          setLawyerId(id);
-        } else {
-          throw new Error("Lawyer ID not found in response");
-        }
-      } catch (error: any) {
-        console.error(
-          "Failed to fetch lawyer data:",
-          error.response?.data || error.message
-        );
-        toast.error("Failed to authenticate. Please log in again.");
-        navigate("/login");
-      }
-    };
-    fetchLawyerData();
-  }, [navigate]);
+        const lr = await api.get("/lawyers/me");
+        const lId = lr.data.user?.id || lr.data._id || lr.data.id;
+        setLawyerId(lId);
 
-  // Fetch cases and aggregate clients
-  useEffect(() => {
-    const fetchClients = async () => {
-      if (!lawyerId) return;
-      setLoading(true);
-      try {
-        const response = await axios.get(
-          `${API_URL}/api/cases?lawyerId=${lawyerId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${
-                localStorage.getItem("authToken") || ""
-              }`,
-            },
-          }
-        );
-        const cases: Case[] = response.data;
+        const cr = await api.get(`/cases?lawyerId=${lId}&all=true`);
+        const allCases: Case[] = cr.data.cases || [];
+
         const clientMap = new Map<string, Client>();
-        cases.forEach((c) => {
-          const existingClient = clientMap.get(c.client.name) || {
-            name: c.client.name,
+        allCases.forEach((c) => {
+          const clientName = c.client.name?.trim() || "Unknown Client";
+          const existingClient = clientMap.get(clientName) || {
+            name: clientName,
             email: c.client.email || "N/A",
             phone: c.client.phone || "N/A",
             address: c.court || "N/A",
@@ -122,6 +101,7 @@ export const LawyerClients = () => {
             status: "Completed",
             joinDate: undefined,
             totalCases: 0,
+            totalFees: 0,
             lastContact: undefined,
             nextHearing: undefined,
             cases: [],
@@ -131,57 +111,106 @@ export const LawyerClients = () => {
             existingClient.status = "Active";
           }
 
-          // Type guard for createdAt
           if (c.createdAt) {
             const createdAtDate = new Date(c.createdAt);
             if (!isNaN(createdAtDate.getTime())) {
-              if (
-                !existingClient.joinDate ||
-                createdAtDate < new Date(existingClient.joinDate || "")
-              ) {
-                existingClient.joinDate = createdAtDate
-                  .toISOString()
-                  .split("T")[0];
+              if (!existingClient.joinDate || createdAtDate < new Date(existingClient.joinDate)) {
+                existingClient.joinDate = createdAtDate.toISOString().split("T")[0];
               }
             }
           }
 
-          existingClient.totalCases = cases.filter(
-            (cc) => cc.client.name === c.client.name
-          ).length;
+          existingClient.totalCases++;
+          existingClient.totalFees += Number(c.fees || 0);
 
-          if (
-            c.nextHearing &&
-            (!existingClient.lastContact ||
-              new Date(c.nextHearing) >
-                new Date(existingClient.lastContact || ""))
-          ) {
-            existingClient.lastContact = c.nextHearing;
-          }
-
-          if (
-            c.nextHearing &&
-            (!existingClient.nextHearing ||
-              new Date(c.nextHearing) <
-                new Date(existingClient.nextHearing || ""))
-          ) {
-            existingClient.nextHearing = c.nextHearing;
+          if (c.nextHearing) {
+            if (!existingClient.nextHearing || new Date(c.nextHearing) < new Date(existingClient.nextHearing)) {
+              existingClient.nextHearing = c.nextHearing;
+            }
           }
 
           existingClient.cases.push(c);
-          clientMap.set(c.client.name, existingClient);
+          clientMap.set(clientName, existingClient);
         });
 
         setClients(Array.from(clientMap.values()));
-      } catch (err) {
-        console.error("Error fetching clients:", err);
-        toast.error("Failed to load clients");
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          toast.error("Session expired.");
+          navigate("/login");
+        } else {
+          toast.error("Failed to load client data.");
+        }
       } finally {
         setLoading(false);
       }
     };
-    fetchClients();
-  }, [lawyerId]);
+    fetchLawyerAndClients();
+  }, [navigate]);
+
+  const loadClientLogs = async (clientName: string) => {
+    setLoadingLogs(true);
+    try {
+      // safely encode clientName incase of spaces
+      const res = await api.get(`/clients/${encodeURIComponent(clientName)}/logs`);
+      setLogs(res.data);
+    } catch (err) {
+      toast.error("Failed to load communication logs.");
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleOpenProfile = (client: Client) => {
+    setSelectedClient(client);
+    setActiveTab("overview");
+    setIsAddingLog(false);
+    loadClientLogs(client.name);
+  };
+
+  const handleSaveLog = async () => {
+    if (!logSummary || !selectedClient) return;
+    setSubmittingLog(true);
+    try {
+      await api.post(`/clients/${encodeURIComponent(selectedClient.name)}/logs`, {
+        date: logDate,
+        type: logType,
+        summary: logSummary,
+        outcome: logOutcome
+      });
+      toast.success("Log added successfully.");
+      setIsAddingLog(false);
+      setLogSummary("");
+      setLogOutcome("");
+      // Refresh
+      loadClientLogs(selectedClient.name);
+    } catch (err) {
+      toast.error("Failed to add log.");
+    } finally {
+      setSubmittingLog(false);
+    }
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    if (!selectedClient) return;
+    if (!window.confirm("Delete this log?")) return;
+    try {
+      await api.delete(`/clients/${encodeURIComponent(selectedClient.name)}/logs/${logId}`);
+      toast.success("Log deleted.");
+      loadClientLogs(selectedClient.name);
+    } catch (err) {
+      toast.error("Failed to delete log.");
+    }
+  };
+
+  const getLogTypeColor = (type: string) => {
+    switch (type) {
+      case 'Meeting': return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'Call': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'Email': return 'bg-orange-100 text-orange-700 border-orange-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
 
   const filteredClients = clients.filter(
     (client) =>
@@ -190,264 +219,277 @@ export const LawyerClients = () => {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
-        <p className="text-gray-600">
-          Manage your client relationships and cases
-        </p>
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 border-l-4 border-blue-600 pl-3">Clients Database</h1>
+          <p className="text-gray-500 mt-1 text-sm">Manage comprehensive client relationships, total files, & communication tracking.</p>
+        </div>
+        <div className="px-4 py-2 bg-blue-50 text-blue-800 rounded-lg text-sm font-semibold border-blue-100 border">
+          Total Active Clients: {clients.length}
+        </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-12">
-          <p className="text-gray-600">Loading clients...</p>
+        <div className="text-center py-20 text-gray-500 animate-pulse">Loading profiles...</div>
+      ) : clients.length === 0 ? (
+        <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
+          <p className="text-gray-500 font-medium">No clients found</p>
+          <p className="text-gray-400 text-sm mt-1">Clients are automatically aggregated from your Case records.</p>
         </div>
       ) : (
         <>
-          {/* Search */}
-          <div className="flex items-center justify-between">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                placeholder="Search clients..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80"
-              />
-            </div>
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              placeholder="Search clients by name or case title..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
 
-          {/* Clients List */}
-          <Card className="p-6">
-            <div className="space-y-4">
-              {filteredClients.length === 0 ? (
-                <div className="text-center py-12">
-                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">
-                    No clients found matching your criteria
-                  </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredClients.map((client) => (
+              <Card key={client.name} className="p-5 border-t-4 border-t-white hover:border-t-blue-500 hover:shadow-lg transition-all duration-300 relative group cursor-pointer" onClick={() => handleOpenProfile(client)}>
+                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-full"><Eye className="w-4 h-4" /></div>
                 </div>
-              ) : (
-                filteredClients.map((client) => (
-                  <div
-                    key={client.name}
-                    className="p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <Avatar className="h-12 w-12">
-                          <AvatarFallback className="bg-blue-500 text-white">
-                            {client.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
+
+                <div className="flex items-center gap-4 mb-5">
+                  <Avatar className="w-14 h-14 border shadow-sm">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-lg font-bold">
+                      {client.name.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="font-bold text-lg text-gray-900 truncate pr-6">{client.name}</h3>
+                    <Badge variant="outline" className={`mt-1 ${client.status === "Active" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                      {client.status} Client
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Phone className="w-4 h-4 text-gray-400" /> {client.phone}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600 truncate">
+                    <Mail className="w-4 h-4 text-gray-400" /> {client.email}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex justify-between items-center bg-gray-50 -mx-5 -mb-5 p-4 rounded-b-xl">
+                  <div className="text-center">
+                    <p className="text-xs text-gray-400 font-medium mb-1">Total Cases</p>
+                    <p className="font-bold text-gray-900">{client.totalCases}</p>
+                  </div>
+                  <div className="w-px h-8 bg-gray-200"></div>
+                  <div className="text-center">
+                    <p className="text-xs text-gray-400 font-medium mb-1">Financial Value</p>
+                    <p className="font-bold text-green-700">${client.totalFees.toLocaleString()}</p>
+                  </div>
+                  <div className="w-px h-8 bg-gray-200"></div>
+                  <div className="text-center">
+                    <p className="text-xs text-gray-400 font-medium mb-1">Next Hearing</p>
+                    <p className={`font-bold ${client.nextHearing ? 'text-blue-600' : 'text-gray-400'}`}>
+                      {client.nextHearing ? format(new Date(client.nextHearing), "MMM dd") : "None"}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Full Profile Modal */}
+          <Dialog open={!!selectedClient} onOpenChange={() => setSelectedClient(null)}>
+            <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+              {selectedClient && (
+                <>
+                  <DialogHeader className="p-6 pb-0">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-4">
+                        <Avatar className="w-16 h-16 border shadow-sm">
+                          <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-xl font-bold">
+                            {selectedClient.name.substring(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <h3 className="font-semibold text-gray-900">
-                            {client.name}
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            {client.caseType}
-                          </p>
-                          <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                            <div className="flex items-center gap-1">
-                              <Phone className="w-3 h-3" />
-                              {client.phone}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Mail className="w-3 h-3" />
-                              {client.email}
-                            </div>
+                          <DialogTitle className="text-2xl font-bold text-gray-900">{selectedClient.name}</DialogTitle>
+                          <p className="text-sm text-gray-500 font-medium mt-1">Client since {selectedClient.joinDate ? format(new Date(selectedClient.joinDate), "MMMM yyyy") : "Unknown"}</p>
+                        </div>
+                      </div>
+                      <Badge className={selectedClient.status === "Active" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
+                        {selectedClient.status}
+                      </Badge>
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="flex gap-6 border-b">
+                      <button
+                        onClick={() => setActiveTab("overview")}
+                        className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'overview' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+                      >
+                        <User className="w-4 h-4" /> Profile & Cases
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("logs")}
+                        className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'logs' ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+                      >
+                        <MessageSquare className="w-4 h-4" /> Communication History
+                        <Badge variant="secondary" className="ml-1 px-1.5 py-0 min-w-[20px] rounded-full text-xs">{logs.length}</Badge>
+                      </button>
+                    </div>
+                  </DialogHeader>
+
+                  <div className="overflow-y-auto p-6 bg-gray-50 flex-1">
+
+                    {/* OVERVIEW TAB */}
+                    {activeTab === "overview" && (
+                      <div className="space-y-6">
+                        {/* Summary Metrics */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="bg-white border rounded-xl p-4 shadow-sm text-center">
+                            <Phone className="w-5 h-5 mx-auto text-blue-500 mb-2" />
+                            <p className="text-xs text-gray-500 uppercase font-medium">Phone</p>
+                            <p className="font-semibold text-gray-900 truncate mt-1">{selectedClient.phone}</p>
+                          </div>
+                          <div className="bg-white border rounded-xl p-4 shadow-sm text-center">
+                            <Mail className="w-5 h-5 mx-auto text-blue-500 mb-2" />
+                            <p className="text-xs text-gray-500 uppercase font-medium">Email</p>
+                            <p className="font-semibold text-gray-900 truncate mt-1">{selectedClient.email}</p>
+                          </div>
+                          <div className="bg-white border rounded-xl p-4 shadow-sm text-center">
+                            <Briefcase className="w-5 h-5 mx-auto text-indigo-500 mb-2" />
+                            <p className="text-xs text-gray-500 uppercase font-medium">Total Files</p>
+                            <p className="font-semibold text-gray-900 truncate mt-1">{selectedClient.totalCases}</p>
+                          </div>
+                          <div className="bg-white border rounded-xl p-4 shadow-sm text-center">
+                            <History className="w-5 h-5 mx-auto text-green-500 mb-2" />
+                            <p className="text-xs text-gray-500 uppercase font-medium">Est. Financial Value</p>
+                            <p className="font-semibold text-green-700 truncate mt-1">${selectedClient.totalFees.toLocaleString()}</p>
+                          </div>
+                        </div>
+
+                        {/* Files Timeline */}
+                        <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+                          <div className="p-4 border-b bg-gray-50 font-bold text-gray-800 flex justify-between items-center">
+                            Client legal files
+                          </div>
+                          <div className="divide-y divide-gray-100">
+                            {selectedClient.cases.map(c => (
+                              <div key={c._id} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-bold text-gray-900">{c.title}</h4>
+                                    <Badge variant="outline" className="text-xs font-semibold px-2 py-0 bg-white">#{c.caseNumber}</Badge>
+                                  </div>
+                                  <p className="text-sm text-gray-500">Opponent: {c.opponentName || 'N/A'} • Court: {c.court}</p>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  {c.nextHearing && <p className="text-xs text-gray-500 font-medium mb-1 border border-blue-100 bg-blue-50 text-blue-700 px-2 py-0.5 rounded inline-block">Next: {format(new Date(c.nextHearing), "MMM dd, yyyy")}</p>}
+                                  <p className="text-sm font-semibold capitalize text-gray-700">Status: {c.status}</p>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
+                    )}
 
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <Badge
-                            variant={
-                              client.status === "Active"
-                                ? "default"
-                                : "secondary"
-                            }
-                            className="mb-1"
-                          >
-                            {client.status}
-                          </Badge>
-                          <p className="text-xs text-gray-500">
-                            {client.totalCases} case
-                            {client.totalCases !== 1 ? "s" : ""}
-                          </p>
-                          {client.nextHearing && (
-                            <p className="text-xs text-blue-600">
-                              Next:{" "}
-                              {new Date(
-                                client.nextHearing
-                              ).toLocaleDateString()}
-                            </p>
-                          )}
+                    {/* LOGS TAB */}
+                    {activeTab === "logs" && (
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4 text-blue-500" /> Activity & Contact Log
+                          </h3>
+                          <Button size="sm" onClick={() => setIsAddingLog(!isAddingLog)} disabled={isAddingLog} className="bg-blue-600 hover:bg-blue-700">
+                            <Plus className="w-4 h-4 mr-1" /> Log Communication
+                          </Button>
                         </div>
 
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setSelectedClient(client)}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-2xl">
-                            <DialogHeader>
-                              <DialogTitle>Client Details</DialogTitle>
-                            </DialogHeader>
-                            {selectedClient && (
-                              <div className="space-y-6">
-                                <div className="flex items-center space-x-4">
-                                  <Avatar className="h-16 w-16">
-                                    <AvatarFallback className="bg-blue-500 text-white text-lg">
-                                      {selectedClient.name
-                                        .split(" ")
-                                        .map((n) => n[0])
-                                        .join("")}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div>
-                                    <h2 className="text-xl font-semibold">
-                                      {selectedClient.name}
-                                    </h2>
-                                    <p className="text-gray-600">
-                                      {selectedClient.caseType}
-                                    </p>
-                                    <Badge
-                                      variant={
-                                        selectedClient.status === "Active"
-                                          ? "default"
-                                          : "secondary"
-                                      }
-                                    >
-                                      {selectedClient.status}
-                                    </Badge>
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-6">
-                                  <div>
-                                    <h3 className="font-semibold mb-3">
-                                      Contact Information
-                                    </h3>
-                                    <div className="space-y-2 text-sm">
-                                      <div className="flex items-center gap-2">
-                                        <Phone className="w-4 h-4 text-gray-400" />
-                                        {selectedClient.phone}
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <Mail className="w-4 h-4 text-gray-400" />
-                                        {selectedClient.email}
-                                      </div>
-                                      <div className="flex items-start gap-2">
-                                        <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
-                                        {selectedClient.address}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div>
-                                    <h3 className="font-semibold mb-3">
-                                      Case Information
-                                    </h3>
-                                    <div className="space-y-2 text-sm">
-                                      <div>
-                                        <span className="text-gray-600">
-                                          Join Date:
-                                        </span>{" "}
-                                        {selectedClient.joinDate || "N/A"}
-                                      </div>
-                                      <div>
-                                        <span className="text-gray-600">
-                                          Total Cases:
-                                        </span>{" "}
-                                        {selectedClient.totalCases}
-                                      </div>
-                                      <div>
-                                        <span className="text-gray-600">
-                                          Last Contact:
-                                        </span>{" "}
-                                        {selectedClient.lastContact
-                                          ? new Date(
-                                              selectedClient.lastContact
-                                            ).toLocaleDateString()
-                                          : "N/A"}
-                                      </div>
-                                      {selectedClient.nextHearing && (
-                                        <div>
-                                          <span className="text-gray-600">
-                                            Next Hearing:
-                                          </span>{" "}
-                                          {new Date(
-                                            selectedClient.nextHearing
-                                          ).toLocaleDateString()}
-                                        </div>
-                                      )}
-                                      <h4 className="font-semibold mt-3">
-                                        Cases
-                                      </h4>
-                                      {selectedClient.cases.map(
-                                        (case_, index) => (
-                                          <div key={index} className="text-sm">
-                                            <p>
-                                              <span className="text-gray-600">
-                                                Title:
-                                              </span>{" "}
-                                              {case_.title}
-                                            </p>
-                                            <p>
-                                              <span className="text-gray-600">
-                                                Case Number:
-                                              </span>{" "}
-                                              {case_.caseNumber}
-                                            </p>
-                                            <p>
-                                              <span className="text-gray-600">
-                                                Status:
-                                              </span>{" "}
-                                              {case_.status}
-                                            </p>
-                                            {case_.nextHearing && (
-                                              <p>
-                                                <span className="text-gray-600">
-                                                  Next Hearing:
-                                                </span>{" "}
-                                                {new Date(
-                                                  case_.nextHearing
-                                                ).toLocaleDateString()}
-                                              </p>
-                                            )}
-                                            <p>
-                                              <span className="text-gray-600">
-                                                Opponent:
-                                              </span>{" "}
-                                              {case_.opponentName || "N/A"}
-                                            </p>
-                                          </div>
-                                        )
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
+                        {/* Add Log Form */}
+                        {isAddingLog && (
+                          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 shadow-inner mb-4 animate-in fade-in slide-in-from-top-2">
+                            <h4 className="font-semibold text-blue-900 mb-3 text-sm">Create New Log Entry</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                              <div>
+                                <Label className="text-xs text-gray-600">Date</Label>
+                                <Input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="bg-white mt-1" />
                               </div>
-                            )}
-                          </DialogContent>
-                        </Dialog>
+                              <div>
+                                <Label className="text-xs text-gray-600">Type of Contact</Label>
+                                <Select value={logType} onValueChange={setLogType}>
+                                  <SelectTrigger className="bg-white mt-1"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Call">Phone Call</SelectItem>
+                                    <SelectItem value="Meeting">In-Person Meeting</SelectItem>
+                                    <SelectItem value="Email">Email / Letter</SelectItem>
+                                    <SelectItem value="Other">Other</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="mb-3">
+                              <Label className="text-xs text-gray-600">Summary / Notes *</Label>
+                              <Input placeholder="What was discussed?" value={logSummary} onChange={e => setLogSummary(e.target.value)} className="bg-white mt-1" />
+                            </div>
+                            <div className="mb-4">
+                              <Label className="text-xs text-gray-600">Outcome / Next Steps (Optional)</Label>
+                              <Input placeholder="Action required..." value={logOutcome} onChange={e => setLogOutcome(e.target.value)} className="bg-white mt-1" />
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <Button variant="ghost" size="sm" onClick={() => setIsAddingLog(false)}>Cancel</Button>
+                              <Button size="sm" onClick={handleSaveLog} disabled={submittingLog || !logSummary}>
+                                {submittingLog ? "Saving..." : "Save Log"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {loadingLogs ? (
+                          <div className="py-10 text-center text-sm text-gray-500 animate-pulse">Loading history...</div>
+                        ) : logs.length === 0 ? (
+                          <div className="text-center py-10 bg-white border border-dashed border-gray-200 rounded-xl">
+                            <p className="text-gray-500 font-medium text-sm">No communication logged yet.</p>
+                          </div>
+                        ) : (
+                          <div className="bg-white border rounded-xl overflow-hidden shadow-sm relative">
+                            {/* Vertical line for timeline effect */}
+                            <div className="absolute left-[24px] top-6 bottom-6 w-px bg-gray-200 hidden sm:block"></div>
+
+                            <div className="divide-y divide-gray-100 relative">
+                              {logs.map(log => (
+                                <div key={log._id} className="p-4 sm:pl-16 relative hover:bg-gray-50 transition group">
+                                  {/* Timeline dot */}
+                                  <div className={`hidden sm:flex absolute left-[19px] top-6 w-[11px] h-[11px] rounded-full ring-4 ring-white ${getLogTypeColor(log.type).split(' ')[0]}`}></div>
+
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Badge variant="outline" className={`border ${getLogTypeColor(log.type)}`}>{log.type}</Badge>
+                                      <span className="text-xs font-semibold text-gray-500">{format(new Date(log.date), "MMM dd, yyyy")}</span>
+                                    </div>
+                                    <button onClick={() => handleDeleteLog(log._id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><Trash2 className="w-4 h-4" /></button>
+                                  </div>
+                                  <p className="text-gray-900 font-medium text-sm mt-1">{log.summary}</p>
+                                  {log.outcome && (
+                                    <div className="mt-2 bg-gray-50 border border-gray-100 p-2 rounded text-xs text-gray-600 flex gap-1.5">
+                                      <span className="font-bold shrink-0">Outcome:</span> {log.outcome}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
-                ))
+                </>
               )}
-            </div>
-          </Card>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

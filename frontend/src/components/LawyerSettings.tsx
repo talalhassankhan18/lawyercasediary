@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import api from "../lib/api";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -19,12 +20,9 @@ import {
   TabsTrigger,
 } from "../components/ui/tabs";
 import { Avatar, AvatarImage, AvatarFallback } from "../components/ui/avatar";
-import { User, Lock, Eye, EyeOff, Camera, Save } from "lucide-react";
+import { User, Lock, Eye, EyeOff, Camera, Save, RefreshCw, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface Settings {
   profile: {
@@ -72,57 +70,44 @@ export const LawyerSettings = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        throw new Error("No authentication token found");
-      }
-      console.log("Fetching lawyer data from:", `${API_URL}/lawyers/me`);
-      const lawyerRes = await axios.get(`${API_URL}/lawyers/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      console.log("Fetching settings from:", `${API_URL}/api/settings`);
-      const settingsRes = await axios.get(`${API_URL}/api/settings`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      console.log("Lawyer data fetched:", lawyerRes.data);
-      console.log("Settings fetched:", settingsRes.data);
+      const [lawyerRes, settingsRes] = await Promise.all([
+        api.get("/lawyers/me"),
+        api.get("/settings")
+      ]);
+
+      const lawyerData = lawyerRes.data.user;
+      const settingsData = settingsRes.data;
+
       setSettings({
         profile: {
-          name: `${lawyerRes.data.user.firstName} ${lawyerRes.data.user.lastName}`,
-          email: lawyerRes.data.user.email,
-          phone: lawyerRes.data.user.phoneNumber || "",
-          barNumber: settingsRes.data.profile.barNumber || "",
-          experience: settingsRes.data.profile.experience || "",
-          specialization: settingsRes.data.profile.specialization || "",
-          address: settingsRes.data.profile.address || "",
-          bio: settingsRes.data.profile.bio || "",
-          profilePicture: lawyerRes.data.user.profilePicture || "",
+          name: `${lawyerData.firstName} ${lawyerData.lastName}`,
+          email: lawyerData.email,
+          phone: lawyerData.phoneNumber || "",
+          barNumber: settingsData.profile.barNumber || "",
+          experience: settingsData.profile.experience || "",
+          specialization: settingsData.profile.specialization || "",
+          address: settingsData.profile.address || "",
+          bio: settingsData.profile.bio || "",
+          profilePicture: lawyerData.profilePicture || "",
         },
         security: {
-          twoFactorEnabled: lawyerRes.data.user.twoFactorEnabled,
-          sessionTimeout: lawyerRes.data.user.sessionTimeout,
-          loginAlerts: lawyerRes.data.user.loginAlerts,
+          twoFactorEnabled: lawyerData.twoFactorEnabled || false,
+          sessionTimeout: lawyerData.sessionTimeout || 30,
+          loginAlerts: lawyerData.loginAlerts || true,
           feeManagementPin: "",
         },
       });
     } catch (err: any) {
-      console.error(
-        "Error fetching settings:",
-        err.response?.data || err.message
-      );
-      if (err.response?.status === 401) {
-        toast.error("Session expired. Please sign in again.");
-        localStorage.removeItem("authToken");
-        navigate("/login");
-      } else {
-        toast.error(err.response?.data?.error || "Failed to fetch settings");
-      }
+      console.error("Error fetching settings:", err);
+      toast.error("Failed to fetch settings");
     } finally {
       setLoading(false);
     }
@@ -136,549 +121,328 @@ export const LawyerSettings = () => {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setSettings({
-      ...settings,
-      profile: { ...settings.profile, [name]: value || "" },
-    });
+    setSettings(prev => ({
+      ...prev,
+      profile: { ...prev.profile, [name]: value || "" },
+    }));
   };
 
   const handleSecurityChange = (field: string, value: any) => {
-    setSettings({
-      ...settings,
-      security: { ...settings.security, [field]: value },
-    });
+    setSettings(prev => ({
+      ...prev,
+      security: { ...prev.security, [field]: value },
+    }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.size > 2 * 1024 * 1024) {
         toast.error("Image size must be less than 2MB");
         return;
       }
-      if (!["image/jpeg", "image/png"].includes(file.type)) {
-        toast.error("Only JPG and PNG files are allowed");
-        return;
+
+      setUpdating(true);
+      try {
+        const formData = new FormData();
+        formData.append("profilePicture", file);
+
+        // Use the dedicated profile picture endpoint
+        const uploadResponse = await api.post("/settings/profile-picture", formData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+
+        const newUrl = uploadResponse.data.profilePicture;
+        setSettings(prev => ({
+          ...prev,
+          profile: { ...prev.profile, profilePicture: newUrl }
+        }));
+        toast.success("Profile picture updated!");
+      } catch (err: any) {
+        toast.error("Failed to upload image");
+      } finally {
+        setUpdating(false);
       }
-      setSelectedFile(file);
-      console.log("Selected file:", file.name);
     }
   };
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setUpdating(true);
     try {
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        throw new Error("No authentication token found");
-      }
-      if (!settings.profile.name || !settings.profile.email) {
-        toast.error("Name and email are required");
-        return;
-      }
-
-      let profilePicture = settings.profile.profilePicture;
-
-      // Upload image if a file is selected
-      if (selectedFile) {
-        const formData = new FormData();
-        formData.append("profilePicture", selectedFile);
-        console.log("Uploading profile picture");
-        const uploadResponse = await axios.post(
-          `${API_URL}/api/settings/profile-picture`,
-          formData,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "multipart/form-data",
-            },
-          }
-        );
-        profilePicture = uploadResponse.data.profilePicture;
-        console.log("Profile picture uploaded:", profilePicture);
-      }
-
-      // Split name into firstName and lastName
       const nameParts = settings.profile.name.trim().split(" ");
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
 
-      // Update Lawyer model
-      const lawyerData = {
+      await api.put("/lawyers/profile", {
         firstName,
         lastName,
         email: settings.profile.email,
         phoneNumber: settings.profile.phone || "",
-        profilePicture: profilePicture || "",
-      };
-      console.log("Submitting lawyer profile update:", lawyerData);
-      const lawyerResponse = await axios.put(
-        `${API_URL}/lawyers/profile`,
-        lawyerData,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      console.log("Lawyer profile updated:", lawyerResponse.data);
+        profilePicture: settings.profile.profilePicture || "",
+      });
 
-      // Update Settings model
-      const settingsData = {
+      const settingsResponse = await api.put("/settings/profile", {
         profile: {
-          name: settings.profile.name,
-          email: settings.profile.email,
-          phone: settings.profile.phone || "",
-          barNumber: settings.profile.barNumber || "",
-          experience: settings.profile.experience || "",
-          specialization: settings.profile.specialization || "",
-          address: settings.profile.address || "",
-          bio: settings.profile.bio || "",
-          profilePicture: profilePicture || "",
+          ...settings.profile,
         },
-      };
-      console.log("Submitting settings profile update:", settingsData);
-      const settingsResponse = await axios.put(
-        `${API_URL}/api/settings/profile`,
-        settingsData,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      console.log("Settings profile updated:", settingsResponse.data);
+      });
 
-      setSettings({ ...settings, profile: settingsResponse.data.profile });
-      setSelectedFile(null);
+      setSettings(prev => ({ ...prev, profile: settingsResponse.data.profile }));
       toast.success("Profile updated successfully");
     } catch (err: any) {
-      console.error(
-        "Error updating profile:",
-        err.response?.data || err.message
-      );
       toast.error(err.response?.data?.error || "Error updating profile");
+    } finally {
+      setUpdating(false);
     }
   };
 
   const handleSecuritySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword || confirmPassword || currentPassword) {
-      if (!currentPassword) {
-        toast.error("Current password is required to change password");
-        return;
-      }
-      if (!newPassword) {
-        toast.error("New password is required");
-        return;
-      }
-      if (!confirmPassword) {
-        toast.error("Confirm password is required");
-        return;
-      }
-      if (newPassword !== confirmPassword) {
-        toast.error("New password and confirmation do not match");
-        return;
-      }
-      if (newPassword.length < 8) {
-        toast.error("New password must be at least 8 characters long");
-        return;
-      }
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error("Please fill in all password fields.");
+      return;
     }
-    if (
-      settings.security.feeManagementPin &&
-      !/^\d{4}$/.test(settings.security.feeManagementPin)
-    ) {
-      toast.error("PIN must be a 4-digit number");
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords do not match");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("New password must be at least 8 characters");
       return;
     }
 
     try {
-      const token = localStorage.getItem("authToken");
-      const payload: any = {
+      setUpdating(true);
+      await api.put("/settings/security", {
+        currentPassword,
+        newPassword,
+        confirmPassword,
         security: {
+          // Keep original values or send empty as the backend expects the 'security' object
           twoFactorEnabled: settings.security.twoFactorEnabled,
           sessionTimeout: settings.security.sessionTimeout,
-          loginAlerts: settings.security.loginAlerts,
-          feeManagementPin: settings.security.feeManagementPin || undefined,
-        },
-      };
-      if (currentPassword && newPassword && confirmPassword) {
-        payload.currentPassword = currentPassword;
-        payload.newPassword = newPassword;
-        payload.confirmPassword = newPassword;
-      }
-      console.log("Submitting security update:", payload);
-      const response = await axios.put(
-        `${API_URL}/api/settings/security`,
-        payload,
-        {
-          headers: { Authorization: `Bearer ${token}` },
+          loginAlerts: settings.security.loginAlerts
         }
-      );
-      console.log("Security update successful:", response.data);
-      toast.success("Security settings updated successfully");
+      });
+      toast.success("Password updated successfully!");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setSettings({
-        ...settings,
-        security: { ...settings.security, feeManagementPin: "" },
-      });
     } catch (err: any) {
-      console.error(
-        "Error updating security:",
-        err.response?.data || err.message
-      );
-      toast.error(
-        err.response?.data?.error || "Error updating security settings"
-      );
+      toast.error(err.response?.data?.error || "Error updating password");
+    } finally {
+      setUpdating(false);
     }
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-7xl mx-auto">
-      <div className="text-center md:text-left">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-          Settings
-        </h1>
-        <p className="text-gray-600 text-sm md:text-base">
-          Manage your profile and security settings
-        </p>
+    <div className="p-6 space-y-6 max-w-5xl mx-auto font-outfit">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+        <p className="text-gray-600">Manage your profile and account security</p>
       </div>
 
       {loading ? (
-        <div className="text-center py-12">
-          <p className="text-gray-600">Loading settings...</p>
-        </div>
+        <div className="text-center py-12 text-gray-500">Loading settings...</div>
       ) : (
-        <Tabs defaultValue="profile" className="space-y-4 md:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 gap-1">
-            <TabsTrigger value="profile" className="text-xs md:text-sm">
-              Profile
-            </TabsTrigger>
-            <TabsTrigger value="security" className="text-xs md:text-sm">
-              Security
-            </TabsTrigger>
+        <Tabs defaultValue="profile">
+          <TabsList className="grid grid-cols-2 w-full max-w-sm mb-6">
+            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="profile">
-            <Card className="p-4 md:p-6">
-              <form
-                onSubmit={handleProfileSubmit}
-                className="space-y-4 md:space-y-6"
-              >
-                <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-                  <Avatar className="h-20 w-20 md:h-24 md:w-24">
-                    {settings.profile.profilePicture ? (
-                      <AvatarImage
-                        src={settings.profile.profilePicture}
-                        alt="Profile Picture"
-                      />
-                    ) : (
-                      <AvatarFallback className="bg-blue-500 text-white text-xl md:text-2xl">
-                        {settings.profile.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    )}
+          <TabsContent value="profile" className="space-y-6">
+            <Card className="p-6">
+              <form onSubmit={handleProfileSubmit} className="space-y-6">
+                <div className="flex flex-col items-center gap-4 bg-gray-50 p-6 rounded-xl border border-dashed">
+                  <Avatar className="h-28 w-28 border-4 border-white shadow-lg">
+                    <AvatarImage src={settings.profile.profilePicture} className="object-cover" />
+                    <AvatarFallback className="bg-blue-600 text-white text-3xl">
+                      {settings.profile.name.split(" ").map(n => n[0]).join("")}
+                    </AvatarFallback>
                   </Avatar>
-                  <div className="text-center md:text-left">
-                    <Label htmlFor="profile-picture" className="cursor-pointer">
-                      <Button variant="outline" size="sm" asChild>
-                        <div>
-                          <Camera className="w-4 h-4 mr-2" />
-                          Change Photo
-                        </div>
-                      </Button>
-                    </Label>
-                    <Input
-                      id="profile-picture"
+                  <div className="text-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={updating}
+                    >
+                      <Camera className="w-4 h-4 mr-2" />
+                      {updating ? "Uploading..." : "Change Photo"}
+                    </Button>
+                    <input
+                      ref={fileInputRef}
                       type="file"
-                      accept="image/jpeg,image/png"
-                      onChange={handleFileChange}
                       className="hidden"
+                      accept="image/*"
+                      onChange={handleFileChange}
                     />
-                    <p className="text-sm text-gray-500 mt-1">
-                      JPG, PNG up to 2MB
-                    </p>
+                    <p className="text-[10px] text-gray-400 mt-2 uppercase tracking-wider font-semibold">Max 2MB (JPG/PNG)</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                  <div>
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      value={settings.profile.name}
-                      onChange={handleProfileChange}
-                      className="mt-1"
-                      required
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Full Name</Label>
+                    <Input name="name" value={settings.profile.name} onChange={handleProfileChange} required />
                   </div>
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={settings.profile.email}
-                      onChange={handleProfileChange}
-                      className="mt-1"
-                      required
-                    />
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input name="email" type="email" value={settings.profile.email} onChange={handleProfileChange} required />
                   </div>
-                  <div>
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input
-                      id="phone"
-                      name="phone"
-                      value={settings.profile.phone || ""}
-                      onChange={handleProfileChange}
-                      className="mt-1"
-                    />
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input name="phone" value={settings.profile.phone} onChange={handleProfileChange} />
                   </div>
-                  <div>
-                    <Label htmlFor="barNumber">Bar Number</Label>
-                    <Input
-                      id="barNumber"
-                      name="barNumber"
-                      value={settings.profile.barNumber || ""}
-                      onChange={handleProfileChange}
-                      className="mt-1"
-                    />
+                  <div className="space-y-2">
+                    <Label>Bar Number</Label>
+                    <Input name="barNumber" value={settings.profile.barNumber} onChange={handleProfileChange} />
                   </div>
-                  <div>
-                    <Label htmlFor="experience">Experience</Label>
-                    <Input
-                      id="experience"
-                      name="experience"
-                      value={settings.profile.experience || ""}
-                      onChange={handleProfileChange}
-                      className="mt-1"
-                    />
+                  <div className="space-y-2">
+                    <Label>Specialization</Label>
+                    <Input name="specialization" value={settings.profile.specialization} onChange={handleProfileChange} placeholder="e.g. Criminal Law, Family Law" />
                   </div>
-                  <div>
-                    <Label htmlFor="specialization">Specialization</Label>
-                    <Input
-                      id="specialization"
-                      name="specialization"
-                      value={settings.profile.specialization || ""}
-                      onChange={handleProfileChange}
-                      className="mt-1"
-                    />
+                  <div className="space-y-2">
+                    <Label>Experience</Label>
+                    <Input name="experience" value={settings.profile.experience} onChange={handleProfileChange} placeholder="e.g. 10 Years" />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <Label>Office Address</Label>
+                    <Input name="address" value={settings.profile.address} onChange={handleProfileChange} placeholder="Your office address..." />
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="address">Chamber Address</Label>
-                  <Textarea
-                    id="address"
-                    name="address"
-                    value={settings.profile.address || ""}
-                    onChange={handleProfileChange}
-                    className="mt-1"
-                  />
+                <div className="space-y-2">
+                  <Label>Professional Bio</Label>
+                  <Textarea name="bio" value={settings.profile.bio} onChange={handleProfileChange} placeholder="Tell us about your practice..." className="h-32" />
                 </div>
 
-                <div>
-                  <Label htmlFor="bio">Professional Bio</Label>
-                  <Textarea
-                    id="bio"
-                    name="bio"
-                    placeholder="Brief description of your experience and expertise"
-                    value={settings.profile.bio || ""}
-                    onChange={handleProfileChange}
-                    className="mt-1"
-                  />
-                </div>
-
-                <Button type="submit" className="w-full md:w-auto">
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Profile
+                <Button type="submit" disabled={updating}>
+                  {updating ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save Changes
                 </Button>
               </form>
             </Card>
           </TabsContent>
 
-          <TabsContent value="security">
-            <Card className="p-4 md:p-6">
-              <form
-                onSubmit={handleSecuritySubmit}
-                className="space-y-4 md:space-y-6"
-              >
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3">Password</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="current-password">Current Password</Label>
-                      <div className="relative mt-1">
-                        <Input
-                          id="current-password"
-                          type={showPassword ? "text" : "password"}
-                          value={currentPassword}
-                          onChange={(e) => setCurrentPassword(e.target.value)}
-                          placeholder="Enter current password"
-                          required={!!newPassword || !!confirmPassword}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-2 top-1/2 -translate-y-1/2"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? (
-                            <EyeOff className="w-4 h-4" />
-                          ) : (
-                            <Eye className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="new-password">New Password</Label>
+          <TabsContent value="security" className="space-y-6">
+            <Card className="p-6">
+              <form onSubmit={handleSecuritySubmit} className="space-y-8">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-blue-600 mb-2">
+                    <Lock className="w-5 h-5" />
+                    <h3 className="text-lg font-semibold">Change Password</h3>
+                  </div>
+                  <p className="text-sm text-gray-500 mb-6">Enter your current password and choose a new secure one.</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Current Password</Label>
                       <Input
-                        id="new-password"
-                        type="password"
+                        type={showPassword ? "text" : "password"}
+                        value={currentPassword}
+                        onChange={e => setCurrentPassword(e.target.value)}
+                        placeholder="••••••••"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>New Password</Label>
+                      <Input
+                        type={showPassword ? "text" : "password"}
                         value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="Enter new password"
-                        className="mt-1"
+                        onChange={e => setNewPassword(e.target.value)}
+                        placeholder="Minimum 8 characters"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="confirm-password">
-                        Confirm New Password
-                      </Label>
+                    <div className="space-y-2">
+                      <Label>Confirm New Password</Label>
                       <Input
-                        id="confirm-password"
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Confirm new password"
-                        className="mt-1"
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        placeholder="Repeat new password"
                       />
                     </div>
                   </div>
-                </div>
-
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3">
-                    Fee Management PIN
-                  </h4>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="fee-pin">
-                        Set/Update PIN for Fee Management
-                      </Label>
-                      <div className="flex flex-col md:flex-row gap-2 mt-1">
-                        <div className="relative flex-1">
-                          <Input
-                            id="fee-pin"
-                            type={showFeePin ? "text" : "password"}
-                            placeholder="Enter 4-digit PIN"
-                            value={settings.security.feeManagementPin || ""}
-                            onChange={(e) =>
-                              handleSecurityChange(
-                                "feeManagementPin",
-                                e.target.value
-                              )
-                            }
-                            maxLength={4}
-                            className="text-center tracking-widest"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-2 top-1/2 -translate-y-1/2"
-                            onClick={() => setShowFeePin(!showFeePin)}
-                          >
-                            {showFeePin ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        This PIN will be required to access Fee Management
-                        section
-                      </p>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setShowPassword(!showPassword)}>
+                      <Button type="button" variant="ghost" size="sm" className="p-0 h-auto text-xs text-gray-500 hover:text-blue-500">
+                        {showPassword ? <EyeOff className="w-3.5 h-3.5 mr-1" /> : <Eye className="w-3.5 h-3.5 mr-1" />}
+                        {showPassword ? "Hide" : "Show"} Passwords
+                      </Button>
                     </div>
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="text-xs text-blue-600 h-auto p-0"
+                      onClick={async () => {
+                        try {
+                          setUpdating(true);
+                          await api.post("/lawyers/forgot-password", { email: settings.profile.email });
+                          toast.success("A password reset link has been sent to your email.");
+                        } catch (err: any) {
+                          toast.error("Failed to send reset link.");
+                        } finally {
+                          setUpdating(false);
+                        }
+                      }}
+                      disabled={updating}
+                    >
+                      Forgot current password?
+                    </Button>
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3">
-                    Security Options
-                  </h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 pr-4">
-                        <Label
-                          htmlFor="two-factor"
-                          className="text-sm md:text-base"
-                        >
-                          Two-Factor Authentication
-                        </Label>
-                        <p className="text-xs md:text-sm text-gray-500">
-                          Add an extra layer of security to your account
-                        </p>
-                      </div>
-                      <Switch
-                        id="two-factor"
-                        checked={settings.security.twoFactorEnabled}
-                        onCheckedChange={(checked) =>
-                          handleSecurityChange("twoFactorEnabled", checked)
-                        }
+                <div className="space-y-6 pt-6 border-t mt-8">
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <Lock className="w-5 h-5 text-yellow-500" />
+                    <h3 className="text-lg font-semibold text-gray-900">Fee Management PIN</h3>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg flex gap-3 text-amber-800 text-sm">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <p>
+                      Set a **4-digit PIN** to secure the Fee Management and Analytics section.
+                      This prevents clerks or unauthorized users from viewing your financial records.
+                    </p>
+                  </div>
+
+                  <div className="max-w-xs space-y-2">
+                    <Label>New 4-Digit PIN</Label>
+                    <div className="relative">
+                      <Input
+                        type={showFeePin ? "text" : "password"}
+                        maxLength={4}
+                        placeholder="e.g. 1234"
+                        value={settings.security.feeManagementPin}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                          handleSecurityChange("feeManagementPin", val);
+                        }}
+                        className="text-lg tracking-[1em] font-mono text-center pl-8"
                       />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 pr-4">
-                        <Label
-                          htmlFor="login-alerts"
-                          className="text-sm md:text-base"
-                        >
-                          Login Alerts
-                        </Label>
-                        <p className="text-xs md:text-sm text-gray-500">
-                          Get notified of new login attempts
-                        </p>
-                      </div>
-                      <Switch
-                        id="login-alerts"
-                        checked={settings.security.loginAlerts}
-                        onCheckedChange={(checked) =>
-                          handleSecurityChange("loginAlerts", checked)
-                        }
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="session-timeout">Session Timeout</Label>
-                      <Select
-                        value={settings.security.sessionTimeout.toString()}
-                        onValueChange={(value) =>
-                          handleSecurityChange(
-                            "sessionTimeout",
-                            parseInt(value)
-                          )
-                        }
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 text-gray-400"
+                        onClick={() => setShowFeePin(!showFeePin)}
                       >
-                        <SelectTrigger className="w-full md:w-48 mt-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="15">15 minutes</SelectItem>
-                          <SelectItem value="30">30 minutes</SelectItem>
-                          <SelectItem value="60">1 hour</SelectItem>
-                          <SelectItem value="120">2 hours</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        {showFeePin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </Button>
                     </div>
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full md:w-auto">
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Security Settings
-                </Button>
+                <div className="pt-8 flex justify-end">
+                  <Button type="submit" size="lg" className="px-12" disabled={updating}>
+                    {updating ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Save Security Settings
+                  </Button>
+                </div>
               </form>
             </Card>
           </TabsContent>

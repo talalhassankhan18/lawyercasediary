@@ -12,9 +12,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        // NO rewrite - backend routes are /api/cases, /api/lawyers, etc.
       },
-      '/lawyers': {
+      '/uploads': {
         target: 'http://localhost:5000',
         changeOrigin: true,
       },

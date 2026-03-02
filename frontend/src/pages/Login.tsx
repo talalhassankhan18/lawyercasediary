@@ -11,7 +11,7 @@ import {
 } from "../components/ui/card";
 import { Scale, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../lib/api";
 import { toast } from "sonner";
 
 export const Login = () => {
@@ -38,16 +38,13 @@ export const Login = () => {
     setError(null);
 
     try {
-      const response = await axios.post(
-        "http://localhost:5000/lawyers/login",
-        {
-          email: formData.email.trim().toLowerCase(),
-          password: formData.password,
-        },
-        { timeout: 10000 }
-      );
+      const response = await api.post("/lawyers/login", {
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+      });
 
       const { token, user } = response.data;
+
 
       if (!token || !user) {
         throw new Error("Invalid response from server");
@@ -61,8 +58,8 @@ export const Login = () => {
         err.response?.status === 401
           ? "Invalid email or password. Please try again."
           : err.response?.data?.error ||
-            err.message ||
-            "Failed to sign in. Please try again.";
+          err.message ||
+          "Failed to sign in. Please try again.";
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {

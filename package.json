@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
-    "dev:frontend": "cd frontend && vite",
-    "dev:backend": "cd backend && ts-node-dev --respawn --transpile-only src/server.ts"
+    "dev:frontend": "npm run --prefix frontend dev",
+    "dev:backend": "npm run --prefix backend dev"
   },
   "devDependencies": {
     "@types/node": "^24.0.14",

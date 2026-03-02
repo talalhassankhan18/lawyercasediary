@@ -22,6 +22,8 @@ export interface ILawyer extends Document {
   sessionTimeout: number;
   loginAlerts: boolean;
   createdAt: Date;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
   comparePassword(password: string): Promise<boolean>;
   compareFeeSecurityKey(key: string): Promise<boolean>;
 }
@@ -58,6 +60,8 @@ const lawyerSchema = new Schema<ILawyer>({
   sessionTimeout: { type: Number, default: 30 },
   loginAlerts: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
+  resetPasswordToken: { type: String },
+  resetPasswordExpires: { type: Date },
 });
 
 // Hash password and feeSecurityKey before saving

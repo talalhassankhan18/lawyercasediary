@@ -74,6 +74,12 @@ const resendLimiter = rateLimit({
   message: { error: "Too many resend attempts. Please try again later." },
 });
 
+const pinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit to 10 PIN attempts
+  message: { error: "Too many PIN attempts. Please try again later." },
+});
+
 // JWT authentication middleware
 const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(" ")[1];
@@ -236,8 +242,8 @@ router.post("/signup", signupLimiter, async (req: Request, res: Response) => {
           <p>Please use the following code to verify your email address:</p>
           <h3>${verificationCode}</h3>
           <p>This code will expire at ${new Date(
-            Date.now() + 48 * 60 * 60 * 1000
-          ).toLocaleString()}</p>
+          Date.now() + 48 * 60 * 60 * 1000
+        ).toLocaleString()}</p>
         `,
       });
       console.log(
@@ -609,5 +615,115 @@ router.put(
     }
   }
 );
+
+// POST verify fee security key
+router.post(
+  "/verify-fee-key",
+  [authenticateToken, pinLimiter],
+  async (req: Request, res: Response) => {
+    try {
+      const lawyerId = (req as any).user.id;
+      const { pin } = req.body;
+
+      if (!pin || !/^\d{4}$/.test(pin)) {
+        console.error("Invalid PIN format for lawyerId:", lawyerId);
+        return res.status(400).json({ error: "PIN must be a 4-digit number" });
+      }
+
+      const lawyer = await Lawyer.findById(lawyerId);
+      if (!lawyer) {
+        console.error("Lawyer not found for lawyerId:", lawyerId);
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const isValid = await lawyer.compareFeeSecurityKey(pin);
+      console.log(
+        "Fee security key verification for lawyerId:",
+        lawyerId,
+        "Result:",
+        isValid
+      );
+
+      if (isValid) {
+        res.json({ success: true, message: "PIN verified successfully" });
+      } else {
+        res.status(400).json({ success: false, error: "Incorrect PIN. Please try again." });
+      }
+    } catch (err: any) {
+      console.error(
+        "Verify fee key error for lawyerId:",
+        (req as any).user.id,
+        "Error:",
+        err.message
+      );
+      res.status(500).json({ success: false, error: "Failed to verify PIN" });
+    }
+  }
+);
+
+// POST forgot password
+router.post("/forgot-password", async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    const lawyer = await Lawyer.findOne({ email: email.toLowerCase() });
+    if (!lawyer) return res.status(404).json({ error: "No account found with this email" });
+
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpires = new Date(Date.now() + 3600000); // 1 hour
+
+    await Lawyer.findByIdAndUpdate(lawyer._id, {
+      resetPasswordToken: resetToken,
+      resetPasswordExpires: resetTokenExpires
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
+
+    await transporter.sendMail({
+      from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Reset Your Lawyer's Case Diary Password",
+      html: `
+        <h2>Password Reset Request</h2>
+        <p>You requested a password reset. Please click the link below to set a new password:</p>
+        <a href="${resetUrl}">${resetUrl}</a>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+      `
+    });
+
+    res.json({ message: "Password reset link sent to your email" });
+  } catch (err: any) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({ error: "Failed to process request" });
+  }
+});
+
+// POST reset password
+router.post("/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: "Token and password are required" });
+
+    const lawyer = await Lawyer.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: new Date() }
+    });
+
+    if (!lawyer) return res.status(400).json({ error: "Invalid or expired reset token" });
+
+    lawyer.password = password;
+    lawyer.resetPasswordToken = undefined;
+    lawyer.resetPasswordExpires = undefined;
+    await lawyer.save();
+
+    res.json({ message: "Password reset successful! You can now login." });
+  } catch (err: any) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ error: "Failed to reset password" });
+  }
+});
 
 export default router;

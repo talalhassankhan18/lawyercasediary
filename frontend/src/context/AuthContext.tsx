@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import api from "../lib/api";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { Lawyer } from "../../../types/lawyer";
@@ -21,11 +21,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     queryKey: ["user"],
     queryFn: async () => {
       const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("No authentication token found");
-      const response = await axios.get("http://localhost:5000/lawyers/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.data.user as Lawyer;
+      if (!token) return null;
+      try {
+        const response = await api.get("/lawyers/me");
+        return response.data.user as Lawyer;
+      } catch (err) {
+        localStorage.removeItem("authToken");
+        throw err;
+      }
     },
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -39,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (error) {
       console.error("Error fetching user:", error);
-      toast.error(error.message || "Failed to load user data");
+      toast.error("Session expired or authentication failed. Please sign in again.");
       localStorage.removeItem("authToken");
       navigate("/login");
     }

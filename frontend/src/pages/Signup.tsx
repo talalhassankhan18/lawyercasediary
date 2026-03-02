@@ -26,7 +26,7 @@ import {
   Camera,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../lib/api";
 import { toast } from "sonner";
 
 export const Signup = () => {
@@ -48,6 +48,7 @@ export const Signup = () => {
     profilePicture: "",
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [timeZoneOffset, setTimeZoneOffset] = useState(0);
 
@@ -124,6 +125,7 @@ export const Signup = () => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setSelectedFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
       setErrors((prev) => ({ ...prev, profilePicture: "" }));
       console.log("Selected file:", file.name);
     }
@@ -151,8 +153,8 @@ export const Signup = () => {
           const formDataUpload = new FormData();
           formDataUpload.append("profilePicture", selectedFile);
           console.log("Uploading profile picture");
-          const uploadResponse = await axios.post(
-            "http://localhost:5000/lawyers/profile-picture",
+          const uploadResponse = await api.post(
+            "/lawyers/profile-picture",
             formDataUpload,
             {
               headers: {
@@ -164,8 +166,8 @@ export const Signup = () => {
           console.log("Profile picture uploaded:", profilePicture);
         }
 
-        const response = await axios.post(
-          "http://localhost:5000/lawyers/signup",
+        const response = await api.post(
+          "/lawyers/signup",
           {
             ...formData,
             profilePicture: profilePicture || "",
@@ -179,24 +181,22 @@ export const Signup = () => {
         if (!validateStep()) {
           throw new Error("Please enter a valid verification code");
         }
-        const response = await axios.post(
-          "http://localhost:5000/lawyers/verify-email",
+        const response = await api.post(
+          "/lawyers/verify-email",
           {
             email: formData.email,
             verificationCode,
-          },
-          { timeout: 10000 }
+          }
         );
         toast.success(response.data.message);
         setStep(4);
       } else if (step === 4) {
-        const response = await axios.post(
-          "http://localhost:5000/lawyers/complete-subscription",
+        const response = await api.post(
+          "/lawyers/complete-subscription",
           {
             email: formData.email,
             paymentDetails: { mock: true },
-          },
-          { timeout: 10000 }
+          }
         );
         toast.success(response.data.message);
         navigate("/login");
@@ -219,12 +219,11 @@ export const Signup = () => {
     try {
       setLoading(true);
       console.log("Attempting to resend code for email:", formData.email);
-      const response = await axios.post(
-        "http://localhost:5000/lawyers/resend-verification",
+      const response = await api.post(
+        "/lawyers/resend-verification",
         {
           email: formData.email,
-        },
-        { timeout: 20000 }
+        }
       );
       toast.success(response.data.message);
       console.log("Resend successful:", response.data.message);
@@ -260,7 +259,12 @@ export const Signup = () => {
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-4">
               <Avatar className="h-20 w-20">
-                {formData.profilePicture ? (
+                {previewUrl ? (
+                  <AvatarImage
+                    src={previewUrl}
+                    alt="Profile Picture"
+                  />
+                ) : formData.profilePicture ? (
                   <AvatarImage
                     src={formData.profilePicture}
                     alt="Profile Picture"
@@ -458,9 +462,8 @@ export const Signup = () => {
                   value={formData.feeSecurityKey}
                   onChange={handleChange}
                   maxLength={4}
-                  className={`pl-10 ${
-                    errors.feeSecurityKey ? "border-destructive" : ""
-                  }`}
+                  className={`pl-10 ${errors.feeSecurityKey ? "border-destructive" : ""
+                    }`}
                   required
                 />
                 <Button
@@ -511,8 +514,8 @@ export const Signup = () => {
                 <strong>{formData.email}</strong>. It expires at{" "}
                 {new Date(
                   Date.now() +
-                    48 * 60 * 60 * 1000 +
-                    timeZoneOffset * 60 * 60 * 1000
+                  48 * 60 * 60 * 1000 +
+                  timeZoneOffset * 60 * 60 * 1000
                 ).toLocaleString()}
               </p>
             </div>
@@ -580,8 +583,8 @@ export const Signup = () => {
                 <div className="text-center mb-4">
                   <h4 className="text-xl font-semibold">Professional Plan</h4>
                   <div className="flex items-baseline justify-center mt-2">
-                    <span className="text-3xl font-bold">$99</span>
-                    <span className="text-muted-foreground ml-1">/month</span>
+                    <span className="text-3xl font-bold">Rs 40,000</span>
+                    <span className="text-muted-foreground ml-1">/lifetime</span>
                   </div>
                 </div>
 
@@ -616,7 +619,7 @@ export const Signup = () => {
                     </div>
                     <div className="flex justify-between">
                       <span>Price:</span>
-                      <span className="font-medium">$99/month</span>
+                      <span className="font-medium">Rs 40,000 (One-time)</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Email:</span>
@@ -639,11 +642,10 @@ export const Signup = () => {
               </Button>
               <p className="text-sm text-muted-foreground mt-4 mb-4">
                 You will be redirected to our secure payment processor to
-                complete your subscription.
+                complete your lifetime subscription.
               </p>
               <p className="text-xs text-muted-foreground">
-                Your free trial starts immediately. You won't be charged until
-                the trial period ends.
+                Pay once and enjoy all features forever with no recurring costs.
               </p>
             </div>
           </div>
@@ -692,9 +694,8 @@ export const Signup = () => {
                 {[1, 2, 3, 4].map((i) => (
                   <div
                     key={i}
-                    className={`w-2 h-2 rounded-full ${
-                      i <= step ? "bg-primary" : "bg-muted"
-                    }`}
+                    className={`w-2 h-2 rounded-full ${i <= step ? "bg-primary" : "bg-muted"
+                      }`}
                   />
                 ))}
               </div>
@@ -724,8 +725,8 @@ export const Signup = () => {
                     {loading
                       ? "Processing..."
                       : step === 3
-                      ? "Verify"
-                      : "Continue"}
+                        ? "Verify"
+                        : "Continue"}
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 )}

